@@ -9,6 +9,8 @@ import '../../data/repositories/mis_tramites_repository_impl.dart';
 import '../../domain/repositories/mis_tramites_repository.dart';
 import 'mis_tramites_state.dart';
 import 'mis_tramites_view_model.dart';
+import 'tramite_seguimiento_state.dart';
+import 'tramite_seguimiento_view_model.dart';
 
 const bool _useMockMisTramites = false;
 
@@ -32,5 +34,18 @@ final misTramitesViewModelProvider =
     StateNotifierProvider<MisTramitesViewModel, MisTramitesState>((ref) {
       return MisTramitesViewModel(
         repository: ref.watch(misTramitesRepositoryProvider),
+      );
+    });
+
+final tramiteSeguimientoViewModelProvider = StateNotifierProvider.autoDispose
+    .family<
+      TramiteSeguimientoViewModel,
+      TramiteSeguimientoState,
+      TramiteSeguimientoArgs
+    >((ref, TramiteSeguimientoArgs args) {
+      return TramiteSeguimientoViewModel(
+        repository: ref.watch(misTramitesRepositoryProvider),
+        usuarioId: args.usuarioId,
+        instanciaId: args.instanciaId,
       );
     });

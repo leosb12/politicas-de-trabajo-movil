@@ -4,9 +4,10 @@ import '../../domain/models/mis_tramite_item.dart';
 import 'tramite_progreso_indicator.dart';
 
 class MisTramiteCard extends StatelessWidget {
-  const MisTramiteCard({super.key, required this.item});
+  const MisTramiteCard({super.key, required this.item, this.onVerSeguimiento});
 
   final MisTramiteItem item;
+  final VoidCallback? onVerSeguimiento;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +29,19 @@ class MisTramiteCard extends StatelessWidget {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 14),
-            TramiteProgresoIndicator(progreso: item.progreso, estado: item.estado),
+            TramiteProgresoIndicator(
+              progreso: item.progreso,
+              estado: item.estado,
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onVerSeguimiento,
+                icon: const Icon(Icons.account_tree_outlined),
+                label: const Text('Ver flujo del trámite'),
+              ),
+            ),
           ],
         ),
       ),

@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 import '../../../../core/network/api_failure.dart';
 import '../../../../core/network/network_constants.dart';
 import '../../domain/models/mis_tramite_item.dart';
+import '../../domain/models/tramite_seguimiento.dart';
+import '../models/tramite_seguimiento_model.dart';
 import 'mis_tramites_mock_datasource.dart';
 
 class MisTramitesRemoteDataSource implements MisTramitesDataSource {
@@ -11,9 +13,7 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
   final Dio _dio;
 
   @override
-  Future<List<MisTramiteItem>> obtenerMisTramites({
-    required String usuarioId,
-  }) {
+  Future<List<MisTramiteItem>> obtenerMisTramites({required String usuarioId}) {
     return _executeWithFallback((Dio dio) async {
       final Response<dynamic> response = await dio.get(
         NetworkConstants.instanciasPath,
@@ -21,6 +21,21 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
       );
 
       return _parseInstancias(data: response.data, usuarioId: usuarioId);
+    });
+  }
+
+  @override
+  Future<TramiteSeguimiento> obtenerSeguimiento({
+    required String usuarioId,
+    required String instanciaId,
+  }) {
+    return _executeWithFallback((Dio dio) async {
+      final Response<dynamic> response = await dio.get(
+        NetworkConstants.instanciaSeguimientoPath(instanciaId),
+        options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+      );
+
+      return _parseSeguimientoResponse(response.data).toDomain();
     });
   }
 
@@ -32,40 +47,44 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
       throw ApiFailure(message: 'Respuesta invalida del servidor.');
     }
 
-    return data.map((dynamic rawItem) {
-      if (rawItem is! Map<String, dynamic>) {
-        throw ApiFailure(message: 'Respuesta invalida del servidor.');
-      }
+    return data
+        .map((dynamic rawItem) {
+          if (rawItem is! Map<String, dynamic>) {
+            throw ApiFailure(message: 'Respuesta invalida del servidor.');
+          }
 
-      final String id = (rawItem['id'] as String? ?? '').trim();
-      if (id.isEmpty) {
-        throw ApiFailure(message: 'El servidor devolvio una instancia invalida.');
-      }
+          final String id = (rawItem['id'] as String? ?? '').trim();
+          if (id.isEmpty) {
+            throw ApiFailure(
+              message: 'El servidor devolvio una instancia invalida.',
+            );
+          }
 
-      final String estadoRaw = (rawItem['estadoInstancia'] as String? ?? '')
-          .trim()
-          .toUpperCase();
+          final String estadoRaw = (rawItem['estadoInstancia'] as String? ?? '')
+              .trim()
+              .toUpperCase();
 
-      final int totalTareas = _toInt(rawItem['totalTareas']);
-      final int tareasCompletadas = _toInt(rawItem['tareasCompletadas']);
+          final int totalTareas = _toInt(rawItem['totalTareas']);
+          final int tareasCompletadas = _toInt(rawItem['tareasCompletadas']);
 
-      return MisTramiteItem(
-        id: id,
-        usuarioId: usuarioId,
-        nombre: (rawItem['politicaNombre'] as String? ?? '').trim().isEmpty
-            ? 'Trámite sin nombre'
-            : (rawItem['politicaNombre'] as String).trim(),
-        estado: _normalizarEstado(estadoRaw),
-        progreso: _calcularProgreso(
-          estadoRaw: estadoRaw,
-          totalTareas: totalTareas,
-          tareasCompletadas: tareasCompletadas,
-        ),
-        actualizadoEn: _parseDateTime(
-          rawItem['fechaActualizacion'] ?? rawItem['fechaCreacion'],
-        ),
-      );
-    }).toList(growable: false);
+          return MisTramiteItem(
+            id: id,
+            usuarioId: usuarioId,
+            nombre: (rawItem['politicaNombre'] as String? ?? '').trim().isEmpty
+                ? 'Trámite sin nombre'
+                : (rawItem['politicaNombre'] as String).trim(),
+            estado: _normalizarEstado(estadoRaw),
+            progreso: _calcularProgreso(
+              estadoRaw: estadoRaw,
+              totalTareas: totalTareas,
+              tareasCompletadas: tareasCompletadas,
+            ),
+            actualizadoEn: _parseDateTime(
+              rawItem['fechaActualizacion'] ?? rawItem['fechaCreacion'],
+            ),
+          );
+        })
+        .toList(growable: false);
   }
 
   Future<T> _executeWithFallback<T>(Future<T> Function(Dio dio) action) async {
@@ -197,5 +216,22 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     }
 
     return DateTime.now();
+  }
+
+  TramiteSeguimientoModel _parseSeguimientoResponse(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      return TramiteSeguimientoModel.fromJson(data);
+    }
+
+    if (data is Map<dynamic, dynamic>) {
+      return TramiteSeguimientoModel.fromJson(
+        data.map(
+          (dynamic key, dynamic value) =>
+              MapEntry<String, dynamic>(key.toString(), value),
+        ),
+      );
+    }
+
+    throw ApiFailure(message: 'Respuesta invalida del servidor.');
   }
 }

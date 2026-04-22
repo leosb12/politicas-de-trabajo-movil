@@ -74,13 +74,30 @@ class AuthViewModel extends StateNotifier<LoginState> {
   }
 
   Future<void> logout() async {
-    await _logoutUseCase();
     state = state.copyWith(
-      isLoading: false,
-      isCheckingSession: false,
+      isLoading: true,
       clearError: true,
-      clearAuthenticatedUser: true,
     );
+
+    try {
+      await _logoutUseCase();
+      state = state.copyWith(
+        isLoading: false,
+        isCheckingSession: false,
+        clearError: true,
+        clearAuthenticatedUser: true,
+      );
+    } on ApiFailure catch (failure) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: failure.message,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'No se pudo cerrar sesion.',
+      );
+    }
   }
 
   Future<void> register({

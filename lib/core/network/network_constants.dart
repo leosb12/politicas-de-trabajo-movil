@@ -19,6 +19,11 @@ class NetworkConstants {
       '/api/politicas/movil/disponibles';
   static const String instanciasPath = '/api/instancias';
 
+  static String instanciaSeguimientoPath(String instanciaId) {
+    final String encodedInstanciaId = Uri.encodeComponent(instanciaId);
+    return '$instanciasPath/$encodedInstanciaId/seguimiento';
+  }
+
   static List<String> candidateBaseUrls({String? currentBaseUrl}) {
     final LinkedHashSet<String> uniqueBaseUrls = LinkedHashSet<String>();
 

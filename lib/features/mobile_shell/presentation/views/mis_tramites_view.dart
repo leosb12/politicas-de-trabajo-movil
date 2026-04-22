@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
+import '../../domain/models/mis_tramite_item.dart';
 import '../viewmodels/mis_tramites_providers.dart';
 import '../widgets/mis_tramite_card.dart';
+import 'tramite_seguimiento_view.dart';
 
 class MisTramitesView extends ConsumerWidget {
   const MisTramitesView({super.key});
@@ -107,12 +109,24 @@ class MisTramitesView extends ConsumerWidget {
         itemBuilder: (BuildContext context, int index) {
           if (index == 0) {
             return Text(
-              'Aquí puedes ver el estado y progreso de cada trámite iniciado.',
+              'Aqui puedes ver el estado, progreso y flujo de cada tramite iniciado.',
               style: Theme.of(context).textTheme.bodyMedium,
             );
           }
 
-          return MisTramiteCard(item: state.tramites[index - 1]);
+          final MisTramiteItem item = state.tramites[index - 1];
+
+          return MisTramiteCard(
+            item: item,
+            onVerSeguimiento: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      TramiteSeguimientoView(tramite: item, usuarioId: userId),
+                ),
+              );
+            },
+          );
         },
       ),
     );

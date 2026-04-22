@@ -9,6 +9,35 @@ import '../widgets/perfil_info_tile.dart';
 class PerfilView extends ConsumerWidget {
   const PerfilView({super.key});
 
+  Future<void> _confirmarCerrarSesion(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Cerrar sesión'),
+          content: const Text('¿Seguro que quieres cerrar sesión?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Cerrar sesión'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar == true) {
+      await ref.read(authViewModelProvider.notifier).logout();
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(perfilViewModelProvider);
@@ -45,6 +74,12 @@ class PerfilView extends ConsumerWidget {
                       },
                 child: const Text('Reintentar'),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _confirmarCerrarSesion(context, ref),
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Cerrar sesión'),
+              ),
             ],
           ),
         ),
@@ -75,6 +110,12 @@ class PerfilView extends ConsumerWidget {
                       },
                 child: const Text('Actualizar'),
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _confirmarCerrarSesion(context, ref),
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Cerrar sesión'),
+              ),
             ],
           ),
         ),
@@ -98,6 +139,12 @@ class PerfilView extends ConsumerWidget {
                 ? 'Sin departamento'
                 : perfil.departamento!,
           ),
+        const SizedBox(height: 24),
+        OutlinedButton.icon(
+          onPressed: () => _confirmarCerrarSesion(context, ref),
+          icon: const Icon(Icons.logout_rounded),
+          label: const Text('Cerrar sesión'),
+        ),
       ],
     );
   }

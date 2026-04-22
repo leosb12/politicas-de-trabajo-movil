@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../viewmodels/iniciar_tramite_providers.dart';
+import '../viewmodels/mis_tramites_providers.dart';
+import '../viewmodels/mobile_shell_providers.dart';
 import '../widgets/tramite_disponible_card.dart';
 
 class IniciarTramiteView extends ConsumerWidget {
@@ -55,10 +57,7 @@ class IniciarTramiteView extends ConsumerWidget {
             children: <Widget>[
               const Icon(Icons.error_outline_rounded, size: 56),
               const SizedBox(height: 12),
-              Text(
-                state.errorMessage!,
-                textAlign: TextAlign.center,
-              ),
+              Text(state.errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () {
@@ -133,6 +132,18 @@ class IniciarTramiteView extends ConsumerWidget {
               final Color backgroundColor = error == null
                   ? Colors.green.shade600
                   : Colors.red.shade700;
+
+              if (error == null) {
+                await ref
+                    .read(misTramitesViewModelProvider.notifier)
+                    .cargarMisTramites(usuarioId: actorUserId);
+
+                if (!context.mounted) {
+                  return;
+                }
+
+                ref.read(mobileShellViewModelProvider.notifier).selectTab(1);
+              }
 
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
