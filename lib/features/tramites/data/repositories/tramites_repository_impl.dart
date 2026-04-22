@@ -21,6 +21,29 @@ class TramitesRepositoryImpl implements TramitesRepository {
   }
 
   @override
+  Future<List<InstanciaIniciada>> obtenerInstancias({
+    required String actorUserId,
+    String? estado,
+  }) async {
+    final models = await _remoteDataSource.obtenerInstancias(
+      actorUserId: actorUserId,
+      estado: estado,
+    );
+
+    return models.map((model) => model.toEntity()).toList(growable: false);
+  }
+
+  @override
+  Future<InstanciaIniciada> obtenerInstanciaDetalle({
+    required String actorUserId,
+    required String instanciaId,
+  }) async {
+    throw UnimplementedError(
+      'obtenerInstanciaDetalle aun no esta implementado en TramitesRepositoryImpl.',
+    );
+  }
+
+  @override
   Future<InstanciaIniciada> iniciarTramite({
     required String actorUserId,
     required String politicaId,

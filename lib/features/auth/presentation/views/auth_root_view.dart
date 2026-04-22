@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../mobile_shell/presentation/views/mobile_shell_view.dart';
 import '../viewmodels/auth_providers.dart';
 import 'login_view.dart';
-import 'mobile_home_view.dart';
 
 class AuthRootView extends ConsumerWidget {
   const AuthRootView({super.key});
@@ -19,7 +19,7 @@ class AuthRootView extends ConsumerWidget {
     }
 
     if (state.isAuthenticated) {
-      return const MobileHomeView();
+      return const MobileShellView();
     }
 
     return const LoginView();

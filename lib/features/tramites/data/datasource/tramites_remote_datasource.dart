@@ -13,6 +13,11 @@ abstract class TramitesRemoteDataSource {
     required String actorUserId,
   });
 
+  Future<List<InstanciaIniciadaModel>> obtenerInstancias({
+    required String actorUserId,
+    String? estado,
+  });
+
   Future<InstanciaIniciadaModel> iniciarTramite({
     required String actorUserId,
     required String politicaId,
@@ -31,10 +36,36 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
     return _executeWithFallback((dio) async {
       final Response<dynamic> response = await dio.get(
         NetworkConstants.availableTramitesPath,
-        options: Options(headers: <String, String>{'X-User-Id': actorUserId}),
+        options: Options(
+          headers: <String, String>{
+            'X-User-Id': actorUserId,
+          },
+        ),
       );
 
       return _parseTramitesDisponiblesResponse(response.data);
+    });
+  }
+
+  @override
+  Future<List<InstanciaIniciadaModel>> obtenerInstancias({
+    required String actorUserId,
+    String? estado,
+  }) {
+    return _executeWithFallback((dio) async {
+      final Response<dynamic> response = await dio.get(
+        NetworkConstants.instanciasPath,
+        queryParameters: estado != null && estado.trim().isNotEmpty
+            ? <String, dynamic>{'estado': estado}
+            : null,
+        options: Options(
+          headers: <String, String>{
+            'X-User-Id': actorUserId,
+          },
+        ),
+      );
+
+      return _parseInstanciasResponse(response.data);
     });
   }
 
@@ -53,7 +84,9 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
         data: jsonEncode(request.toJson()),
         options: Options(
           contentType: Headers.jsonContentType,
-          headers: <String, String>{'X-User-Id': actorUserId},
+          headers: <String, String>{
+            'X-User-Id': actorUserId,
+          },
         ),
       );
 
@@ -108,15 +141,27 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
       throw ApiFailure(message: 'Respuesta invalida del servidor.');
     }
 
-    return data
-        .map((item) {
-          if (item is! Map<String, dynamic>) {
-            throw ApiFailure(message: 'Respuesta invalida del servidor.');
-          }
+    return data.map((item) {
+      if (item is! Map<String, dynamic>) {
+        throw ApiFailure(message: 'Respuesta invalida del servidor.');
+      }
 
-          return TramiteDisponibleModel.fromJson(item);
-        })
-        .toList(growable: false);
+      return TramiteDisponibleModel.fromJson(item);
+    }).toList(growable: false);
+  }
+
+  List<InstanciaIniciadaModel> _parseInstanciasResponse(dynamic data) {
+    if (data is! List<dynamic>) {
+      throw ApiFailure(message: 'Respuesta invalida del servidor.');
+    }
+
+    return data.map((item) {
+      if (item is! Map<String, dynamic>) {
+        throw ApiFailure(message: 'Respuesta invalida del servidor.');
+      }
+
+      return InstanciaIniciadaModel.fromJson(item);
+    }).toList(growable: false);
   }
 
   InstanciaIniciadaModel _parseInstanciaIniciadaResponse(dynamic data) {
@@ -128,7 +173,7 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
   }
 
   Dio _buildDioFor({required String baseUrl}) {
-    return Dio(
+    final Dio dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
         connectTimeout: _dio.options.connectTimeout,
@@ -137,6 +182,41 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
         headers: Map<String, dynamic>.from(_dio.options.headers),
       ),
     );
+
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          print('=== REQUEST ===');
+          print('URL: ${options.baseUrl}${options.path}');
+          print('METHOD: ${options.method}');
+          print('HEADERS: ${options.headers}');
+          print('QUERY: ${options.queryParameters}');
+          print('DATA: ${options.data}');
+          print('===============');
+          handler.next(options);
+        },
+        onResponse: (response, handler) {
+          print('=== RESPONSE ===');
+          print('URL: ${response.requestOptions.uri}');
+          print('STATUS: ${response.statusCode}');
+          print('DATA: ${response.data}');
+          print('================');
+          handler.next(response);
+        },
+        onError: (DioException e, handler) {
+          print('=== DIO ERROR ===');
+          print('TYPE: ${e.type}');
+          print('MESSAGE: ${e.message}');
+          print('STATUS: ${e.response?.statusCode}');
+          print('RESPONSE: ${e.response?.data}');
+          print('PATH: ${e.requestOptions.uri}');
+          print('=================');
+          handler.next(e);
+        },
+      ),
+    );
+
+    return dio;
   }
 
   bool _isRetryableNetworkError(DioException exception) {
