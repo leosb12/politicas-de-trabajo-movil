@@ -2,16 +2,15 @@ import 'package:dio/dio.dart';
 
 class ApiClient {
   ApiClient({required String baseUrl})
-      : dio = Dio(
-          BaseOptions(
-            baseUrl: baseUrl,
-            connectTimeout: const Duration(seconds: 60),
-            receiveTimeout: const Duration(seconds: 60),
-            headers: const <String, String>{
-              'Content-Type': 'application/json',
-            },
-          ),
-        ) {
+    : dio = Dio(
+        BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: const Duration(seconds: 8),
+          sendTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 60),
+          headers: const <String, String>{'Content-Type': 'application/json'},
+        ),
+      ) {
     // 🔥 LOGS DE CONFIGURACIÓN
     print('=== API CLIENT INIT ===');
     print('BASE URL: ${dio.options.baseUrl}');

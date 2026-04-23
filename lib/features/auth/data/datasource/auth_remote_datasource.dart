@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -29,41 +30,11 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         .map((baseUrl) => _attemptLogin(baseUrl: baseUrl, request: request))
         .toList(growable: false);
 
-    final List<_LoginAttemptResult> results = await Future.wait(attempts);
+    final _LoginAttemptResult winningResult =
+        await _waitForFirstSuccessfulLogin(attempts);
 
-    for (final _LoginAttemptResult result in results) {
-      final LoginResponseModel? model = result.model;
-      if (model == null) {
-        continue;
-      }
-
-      _dio.options.baseUrl = result.baseUrl;
-      return model;
-    }
-
-    final ApiFailure? firstFatalFailure = results
-        .map((result) => result.fatalFailure)
-        .whereType<ApiFailure>()
-        .cast<ApiFailure?>()
-        .firstWhere((failure) => failure != null, orElse: () => null);
-
-    if (firstFatalFailure != null) {
-      throw firstFatalFailure;
-    }
-
-    final DioException? lastRetryableException = results
-        .map((result) => result.retryableException)
-        .whereType<DioException>()
-        .cast<DioException?>()
-        .lastWhere((exception) => exception != null, orElse: () => null);
-
-    if (lastRetryableException != null) {
-      throw ApiFailure.fromDioException(lastRetryableException);
-    }
-
-    throw ApiFailure(
-      message: 'No se encontro una URL base valida para el backend.',
-    );
+    _dio.options.baseUrl = winningResult.baseUrl;
+    return winningResult.model!;
   }
 
   @override
@@ -76,40 +47,132 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         .map((baseUrl) => _attemptRegister(baseUrl: baseUrl, request: request))
         .toList(growable: false);
 
-    final List<_RegisterAttemptResult> results = await Future.wait(attempts);
+    final _RegisterAttemptResult winningResult =
+        await _waitForFirstSuccessfulRegister(attempts);
 
-    for (final _RegisterAttemptResult result in results) {
-      if (!result.success) {
-        continue;
+    _dio.options.baseUrl = winningResult.baseUrl;
+  }
+
+  Future<_LoginAttemptResult> _waitForFirstSuccessfulLogin(
+    List<Future<_LoginAttemptResult>> attempts,
+  ) {
+    final Completer<_LoginAttemptResult> completer =
+        Completer<_LoginAttemptResult>();
+    final List<_LoginAttemptResult> results = <_LoginAttemptResult>[];
+    int pending = attempts.length;
+
+    void completeIfAllFailed() {
+      if (pending != 0 || completer.isCompleted) {
+        return;
       }
 
-      _dio.options.baseUrl = result.baseUrl;
-      return;
+      final ApiFailure? firstFatalFailure = results
+          .map((result) => result.fatalFailure)
+          .whereType<ApiFailure>()
+          .cast<ApiFailure?>()
+          .firstWhere((failure) => failure != null, orElse: () => null);
+
+      if (firstFatalFailure != null) {
+        completer.completeError(firstFatalFailure);
+        return;
+      }
+
+      final DioException? lastRetryableException = results
+          .map((result) => result.retryableException)
+          .whereType<DioException>()
+          .cast<DioException?>()
+          .lastWhere((exception) => exception != null, orElse: () => null);
+
+      if (lastRetryableException != null) {
+        completer.completeError(
+          ApiFailure.fromDioException(lastRetryableException),
+        );
+        return;
+      }
+
+      completer.completeError(
+        ApiFailure(
+          message: 'No se encontro una URL base valida para el backend.',
+        ),
+      );
     }
 
-    final ApiFailure? firstFatalFailure = results
-        .map((result) => result.fatalFailure)
-        .whereType<ApiFailure>()
-        .cast<ApiFailure?>()
-        .firstWhere((failure) => failure != null, orElse: () => null);
+    for (final Future<_LoginAttemptResult> attempt in attempts) {
+      attempt.then((result) {
+        results.add(result);
+        pending -= 1;
 
-    if (firstFatalFailure != null) {
-      throw firstFatalFailure;
+        if (result.model != null && !completer.isCompleted) {
+          completer.complete(result);
+          return;
+        }
+
+        completeIfAllFailed();
+      });
     }
 
-    final DioException? lastRetryableException = results
-        .map((result) => result.retryableException)
-        .whereType<DioException>()
-        .cast<DioException?>()
-        .lastWhere((exception) => exception != null, orElse: () => null);
+    return completer.future;
+  }
 
-    if (lastRetryableException != null) {
-      throw ApiFailure.fromDioException(lastRetryableException);
+  Future<_RegisterAttemptResult> _waitForFirstSuccessfulRegister(
+    List<Future<_RegisterAttemptResult>> attempts,
+  ) {
+    final Completer<_RegisterAttemptResult> completer =
+        Completer<_RegisterAttemptResult>();
+    final List<_RegisterAttemptResult> results = <_RegisterAttemptResult>[];
+    int pending = attempts.length;
+
+    void completeIfAllFailed() {
+      if (pending != 0 || completer.isCompleted) {
+        return;
+      }
+
+      final ApiFailure? firstFatalFailure = results
+          .map((result) => result.fatalFailure)
+          .whereType<ApiFailure>()
+          .cast<ApiFailure?>()
+          .firstWhere((failure) => failure != null, orElse: () => null);
+
+      if (firstFatalFailure != null) {
+        completer.completeError(firstFatalFailure);
+        return;
+      }
+
+      final DioException? lastRetryableException = results
+          .map((result) => result.retryableException)
+          .whereType<DioException>()
+          .cast<DioException?>()
+          .lastWhere((exception) => exception != null, orElse: () => null);
+
+      if (lastRetryableException != null) {
+        completer.completeError(
+          ApiFailure.fromDioException(lastRetryableException),
+        );
+        return;
+      }
+
+      completer.completeError(
+        ApiFailure(
+          message: 'No se encontro una URL base valida para el backend.',
+        ),
+      );
     }
 
-    throw ApiFailure(
-      message: 'No se encontro una URL base valida para el backend.',
-    );
+    for (final Future<_RegisterAttemptResult> attempt in attempts) {
+      attempt.then((result) {
+        results.add(result);
+        pending -= 1;
+
+        if (result.success && !completer.isCompleted) {
+          completer.complete(result);
+          return;
+        }
+
+        completeIfAllFailed();
+      });
+    }
+
+    return completer.future;
   }
 
   Future<_LoginAttemptResult> _attemptLogin({
