@@ -17,6 +17,12 @@ class TramitesView extends ConsumerStatefulWidget {
 }
 
 class _TramitesViewState extends ConsumerState<TramitesView> {
+  static const Map<String, String> _tipoPoliticaLabels = <String, String>{
+    'INTERNA': 'Interna',
+    'EXTERNA': 'Externa',
+    'AMBAS': 'Ambas',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -195,6 +201,35 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      Chip(
+                        label: Text(
+                          _tipoPoliticaLabels[tramite.tipoPolitica] ??
+                              tramite.tipoPolitica,
+                        ),
+                      ),
+                      if (tramite.tipoPolitica == 'INTERNA' &&
+                          tramite.departamentoInicioNombre != null &&
+                          tramite.departamentoInicioNombre!.trim().isNotEmpty)
+                        Chip(
+                          avatar: const Icon(Icons.apartment_rounded, size: 18),
+                          label: Text(
+                            'Solo ${tramite.departamentoInicioNombre}',
+                          ),
+                        ),
+                      if (tramite.tipoPolitica == 'INTERNA' &&
+                          (tramite.departamentoInicioNombre == null ||
+                              tramite.departamentoInicioNombre!.trim().isEmpty))
+                        const Chip(
+                          avatar: Icon(Icons.groups_rounded, size: 18),
+                          label: Text('Todos los departamentos'),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 14),
                   PrimaryButton(
                     label: 'Iniciar tramite',
