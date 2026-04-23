@@ -199,6 +199,9 @@ class TareaSeguimientoModel {
     required this.id,
     required this.nodoId,
     required this.nombre,
+    required this.responsableTipo,
+    required this.responsableId,
+    required this.responsableNombre,
     required this.estado,
     required this.asignadoA,
     required this.asignadoANombre,
@@ -208,7 +211,14 @@ class TareaSeguimientoModel {
     return TareaSeguimientoModel(
       id: _stringByKeys(json, <String>['id', 'tareaId']),
       nodoId: _stringByKeys(json, <String>['nodoId']),
-      nombre: _stringByKeys(json, <String>['nombre']),
+      nombre: _stringByKeys(json, <String>[
+        'nombre',
+        'nombreNodo',
+        'nombreActividad',
+      ]),
+      responsableTipo: _stringByKeys(json, <String>['responsableTipo']),
+      responsableId: _stringByKeys(json, <String>['responsableId']),
+      responsableNombre: _stringByKeys(json, <String>['responsableNombre']),
       estado: _stringByKeys(json, <String>['estado', 'estadoTarea']),
       asignadoA: _stringByKeys(json, <String>['asignadoA']),
       asignadoANombre: _stringByKeys(json, <String>['asignadoANombre']),
@@ -218,6 +228,9 @@ class TareaSeguimientoModel {
   final String id;
   final String nodoId;
   final String nombre;
+  final String responsableTipo;
+  final String responsableId;
+  final String responsableNombre;
   final String estado;
   final String asignadoA;
   final String asignadoANombre;
@@ -227,6 +240,9 @@ class TareaSeguimientoModel {
       id: id,
       nodoId: nodoId,
       nombre: nombre,
+      responsableTipo: responsableTipo,
+      responsableId: responsableId,
+      responsableNombre: responsableNombre,
       estado: estado,
       asignadoA: asignadoA,
       asignadoANombre: asignadoANombre,

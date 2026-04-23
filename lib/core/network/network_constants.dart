@@ -18,10 +18,21 @@ class NetworkConstants {
   static const String availableTramitesPath =
       '/api/politicas/movil/disponibles';
   static const String instanciasPath = '/api/instancias';
+  static const String tareasPath = '/api/tareas';
 
   static String instanciaSeguimientoPath(String instanciaId) {
     final String encodedInstanciaId = Uri.encodeComponent(instanciaId);
     return '$instanciasPath/$encodedInstanciaId/seguimiento';
+  }
+
+  static String tareaDetallePath(String tareaId) {
+    final String encodedTareaId = Uri.encodeComponent(tareaId);
+    return '$tareasPath/$encodedTareaId';
+  }
+
+  static String tareaCompletarPath(String tareaId) {
+    final String encodedTareaId = Uri.encodeComponent(tareaId);
+    return '$tareasPath/$encodedTareaId/completar';
   }
 
   static List<String> candidateBaseUrls({String? currentBaseUrl}) {

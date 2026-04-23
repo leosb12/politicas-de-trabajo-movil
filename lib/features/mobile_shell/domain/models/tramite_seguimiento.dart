@@ -91,6 +91,9 @@ class TareaSeguimiento {
     required this.id,
     required this.nodoId,
     required this.nombre,
+    required this.responsableTipo,
+    required this.responsableId,
+    required this.responsableNombre,
     required this.estado,
     required this.asignadoA,
     required this.asignadoANombre,
@@ -99,6 +102,9 @@ class TareaSeguimiento {
   final String id;
   final String nodoId;
   final String nombre;
+  final String responsableTipo;
+  final String responsableId;
+  final String responsableNombre;
   final String estado;
   final String asignadoA;
   final String asignadoANombre;

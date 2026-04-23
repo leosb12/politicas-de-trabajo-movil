@@ -8,6 +8,7 @@ import '../../domain/models/tramite_seguimiento.dart';
 import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/tramite_seguimiento_state.dart';
 import '../viewmodels/tramite_seguimiento_view_model.dart';
+import 'widgets/tarea_formulario_pendiente_card.dart';
 
 class TramiteSeguimientoView extends ConsumerStatefulWidget {
   const TramiteSeguimientoView({
@@ -71,6 +72,47 @@ class _TramiteSeguimientoViewState
     );
   }
 
+  /// Busca una tarea abierta asignada directamente al usuario actual.
+  TareaSeguimiento? _findPendingUserTask(
+    TramiteSeguimiento seguimiento,
+    String usuarioId,
+  ) {
+    final String normalizedUserId = usuarioId.trim();
+    if (normalizedUserId.isEmpty) {
+      return null;
+    }
+
+    for (final TareaSeguimiento tarea in seguimiento.tareas) {
+      final String estado = tarea.estado.trim().toUpperCase();
+      final bool isOpenTask =
+          estado == 'PENDIENTE' ||
+          estado == 'EN_PROCESO' ||
+          estado == 'ABIERTA' ||
+          estado == 'ASIGNADA' ||
+          estado == 'ACTUAL';
+      if (!isOpenTask) {
+        continue;
+      }
+
+      if (tarea.responsableTipo.trim().toUpperCase() != 'USUARIO') {
+        continue;
+      }
+
+      if (tarea.responsableId.trim() != normalizedUserId) {
+        continue;
+      }
+
+      final String assignedTo = tarea.asignadoA.trim();
+      if (assignedTo.isNotEmpty && assignedTo != normalizedUserId) {
+        continue;
+      }
+
+      return tarea;
+    }
+
+    return null;
+  }
+
   Widget _buildBody(BuildContext context, TramiteSeguimientoState state) {
     if (state.isLoading && state.seguimiento == null) {
       return const Center(child: CircularProgressIndicator());
@@ -120,6 +162,10 @@ class _TramiteSeguimientoViewState
       seguimiento: seguimiento,
       fallbackItem: widget.tramite,
     );
+    final TareaSeguimiento? pendingUserTask = _findPendingUserTask(
+      seguimiento,
+      widget.usuarioId,
+    );
 
     return RefreshIndicator(
       onRefresh: _cargarSeguimiento,
@@ -131,6 +177,19 @@ class _TramiteSeguimientoViewState
           if (state.errorMessage != null) ...<Widget>[
             const SizedBox(height: 12),
             _InlineWarning(message: state.errorMessage!),
+          ],
+          if (pendingUserTask != null) ...<Widget>[
+            const SizedBox(height: 14),
+            TareaFormularioPendienteCard(
+              usuarioId: widget.usuarioId,
+              tareaId: pendingUserTask.id,
+              instanciaId: widget.tramite.id,
+              nombreActividad: _fallback(
+                pendingUserTask.nombre,
+                'Actividad pendiente',
+              ),
+              onCompleted: _cargarSeguimiento,
+            ),
           ],
           const SizedBox(height: 14),
           _CurrentLocationPanel(data: data),
@@ -362,10 +421,11 @@ class _CurrentDepartmentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final ColorScheme colors = theme.colorScheme;
-    final String department = _fallback(
-      item.departamentoNombre,
-      'Departamento sin nombre',
-    );
+    final bool isDirectUserTask =
+        item.responsableTipo.trim().toUpperCase() == 'USUARIO';
+    final String department = isDirectUserTask
+        ? 'Asignado directamente al usuario'
+        : _fallback(item.departamentoNombre, 'Departamento sin nombre');
     final String node = _fallback(item.nodoNombre, 'Etapa actual');
     final String responsible = _firstNonEmpty(<String>[
       item.asignadoANombre,
