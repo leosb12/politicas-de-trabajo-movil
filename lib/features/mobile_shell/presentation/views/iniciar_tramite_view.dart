@@ -9,6 +9,7 @@ import '../viewmodels/iniciar_tramite_providers.dart';
 import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/mobile_shell_providers.dart';
 import '../widgets/tramite_disponible_card.dart';
+import '../widgets/tramites_search_bar.dart';
 
 class IniciarTramiteView extends ConsumerStatefulWidget {
   const IniciarTramiteView({super.key});
@@ -19,6 +20,8 @@ class IniciarTramiteView extends ConsumerStatefulWidget {
 
 class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
   String? _requestedUserId;
+  String _searchQuery = '';
+  TramiteFilter _currentFilter = TramiteFilter.todos;
 
   bool _requierePagoValido(TramiteDisponibleItem tramite) {
     if (!tramite.requierePago) {
@@ -228,74 +231,95 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
       );
     }
 
+    final tramitesFiltrados = state.tramites.where((t) {
+      final bool matchesSearch = t.nombre.toLowerCase().contains(_searchQuery.toLowerCase());
+      final bool matchesFilter = _currentFilter == TramiteFilter.todos ||
+          (_currentFilter == TramiteFilter.paga && t.requierePago) ||
+          (_currentFilter == TramiteFilter.gratis && !t.requierePago);
+      return matchesSearch && matchesFilter;
+    }).toList();
+
     return RefreshIndicator(
       onRefresh: () {
         _requestedUserId = actorUserId;
         return viewModel.cargarTramites(actorUserId: actorUserId);
       },
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16),
-        itemCount: state.tramites.length + 1,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (BuildContext context, int index) {
-          if (index == 0) {
-            return Text(
-              'Selecciona un tramite activo para iniciar una nueva instancia.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            );
-          }
-
-          final tramite = state.tramites[index - 1];
-          final bool isIniciando = state.isIniciando(tramite.id);
-
-          return TramiteDisponibleCard(
-            tramite: tramite,
-            isIniciando: isIniciando,
-            onIniciar: () async {
-              if (tramite.requierePago && _requierePagoValido(tramite)) {
-                await _mostrarPagoModal(
-                  tramite: tramite,
-                  actorUserId: actorUserId,
-                );
-                return;
-              }
-
-              final String? error = await viewModel.iniciarTramite(
-                actorUserId: actorUserId,
-                tramiteId: tramite.id,
-              );
-
-              if (!context.mounted) {
-                return;
-              }
-
-              final String message = error ?? 'Tramite iniciado correctamente.';
-              final Color backgroundColor = error == null
-                  ? Colors.green.shade600
-                  : Colors.red.shade700;
-
-              if (error == null) {
-                await ref
-                    .read(misTramitesViewModelProvider.notifier)
-                    .cargarMisTramites(usuarioId: actorUserId);
-
-                if (!context.mounted) {
-                  return;
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: TramitesSearchBar(
+              onQueryChanged: (query) => setState(() => _searchQuery = query),
+              onFilterChanged: (filter) => setState(() => _currentFilter = filter),
+            ),
+          ),
+          Expanded(
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              itemCount: tramitesFiltrados.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (BuildContext context, int index) {
+                if (index == 0) {
+                  return Text(
+                    'Selecciona un tramite activo para iniciar una nueva instancia.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  );
                 }
 
-                ref.read(mobileShellViewModelProvider.notifier).selectTab(1);
-              }
+                final tramite = tramitesFiltrados[index - 1];
+                final bool isIniciando = state.isIniciando(tramite.id);
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(message),
-                  backgroundColor: backgroundColor,
-                ),
-              );
-            },
-          );
-        },
+                return TramiteDisponibleCard(
+                  tramite: tramite,
+                  isIniciando: isIniciando,
+                  onIniciar: () async {
+                    if (tramite.requierePago && _requierePagoValido(tramite)) {
+                      await _mostrarPagoModal(
+                        tramite: tramite,
+                        actorUserId: actorUserId,
+                      );
+                      return;
+                    }
+
+                    final String? error = await viewModel.iniciarTramite(
+                      actorUserId: actorUserId,
+                      tramiteId: tramite.id,
+                    );
+
+                    if (!context.mounted) {
+                      return;
+                    }
+
+                    final String message = error ?? 'Tramite iniciado correctamente.';
+                    final Color backgroundColor = error == null
+                        ? Colors.green.shade600
+                        : Colors.red.shade700;
+
+                    if (error == null) {
+                      await ref
+                          .read(misTramitesViewModelProvider.notifier)
+                          .cargarMisTramites(usuarioId: actorUserId);
+
+                      if (!context.mounted) {
+                        return;
+                      }
+
+                      ref.read(mobileShellViewModelProvider.notifier).selectTab(1);
+                    }
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(message),
+                        backgroundColor: backgroundColor,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

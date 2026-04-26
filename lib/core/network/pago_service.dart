@@ -71,12 +71,16 @@ class PagoService {
   }
 
   Future<StripeVerificationResult> verificarStripe({
+    required String actorUserId,
     required String sessionId,
   }) async {
     try {
       final Response<dynamic> response = await _dio.get(
         NetworkConstants.stripeVerificarPath,
         queryParameters: <String, dynamic>{'sessionId': sessionId},
+        options: Options(
+          headers: <String, String>{'X-User-Id': actorUserId},
+        ),
       );
 
       return _parseStripeVerificationResult(response.data);
@@ -109,10 +113,16 @@ class PagoService {
     }
   }
 
-  Future<PagoDetalle> obtenerPago({required String pagoId}) async {
+  Future<PagoDetalle> obtenerPago({
+    required String actorUserId,
+    required String pagoId,
+  }) async {
     try {
       final Response<dynamic> response = await _dio.get(
         NetworkConstants.pagoPath(pagoId),
+        options: Options(
+          headers: <String, String>{'X-User-Id': actorUserId},
+        ),
       );
 
       return _parsePagoDetalle(response.data, fallbackId: pagoId);

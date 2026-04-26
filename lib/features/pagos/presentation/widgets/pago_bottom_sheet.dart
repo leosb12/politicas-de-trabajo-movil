@@ -172,7 +172,10 @@ class _PagoBottomSheetState extends State<PagoBottomSheet> {
 
     try {
       final StripeVerificationResult result = await widget.pagoService
-          .verificarStripe(sessionId: sessionId.trim());
+          .verificarStripe(
+            actorUserId: widget.actorUserId,
+            sessionId: sessionId.trim(),
+          );
 
       if (!result.confirmado) {
         setState(() {
@@ -219,6 +222,7 @@ class _PagoBottomSheetState extends State<PagoBottomSheet> {
 
     try {
       final PagoDetalle pago = await widget.pagoService.obtenerPago(
+        actorUserId: widget.actorUserId,
         pagoId: pagoId.trim(),
       );
 
