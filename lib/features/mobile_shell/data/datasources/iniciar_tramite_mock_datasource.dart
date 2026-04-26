@@ -19,18 +19,24 @@ class IniciarTramiteMockDataSource implements IniciarTramiteDataSource {
           nombre: 'Solicitud de partida de nacimiento',
           descripcion: 'Genera una solicitud digital para obtener la partida.',
           categoria: 'Registro civil',
+          requierePago: false,
         ),
         TramiteDisponibleItem(
           id: 'tramite_002',
           nombre: 'Renovación de licencia comercial',
           descripcion: 'Inicia el proceso para renovar tu licencia vigente.',
           categoria: 'Comercio',
+          requierePago: true,
+          montoPago: 250.0,
+          monedaPago: 'DOP',
+          descripcionPago: 'Pago de trámite',
         ),
         TramiteDisponibleItem(
           id: 'tramite_003',
           nombre: 'Certificado de residencia',
           descripcion: 'Solicita el certificado con validación local.',
           categoria: 'Ciudadanía',
+          requierePago: false,
         ),
       ];
 

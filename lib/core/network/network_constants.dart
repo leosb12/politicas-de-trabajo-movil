@@ -48,10 +48,18 @@ class NetworkConstants {
   static const String availableTramitesPath =
       '/api/politicas/movil/disponibles';
   static const String instanciasPath = '/api/instancias';
+  static const String stripeCheckoutPath = '/api/pagos/stripe/crear-checkout';
+  static const String stripeVerificarPath = '/api/pagos/stripe/verificar';
+  static const String paypalCrearLinkPath = '/api/pagos/paypal/crear-link';
   static const String misTramitesCardsPath =
       '$instanciasPath/mis-tramites/cards';
   static const String tareasPath = '/api/tareas';
   static const String guiaUsuarioMovilPath = '/api/guide/mobile-user';
+
+  static String pagoPath(String pagoId) {
+    final String encodedPagoId = Uri.encodeComponent(pagoId);
+    return '/api/pagos/$encodedPagoId';
+  }
 
   static String instanciaSeguimientoPath(String instanciaId) {
     final String encodedInstanciaId = Uri.encodeComponent(instanciaId);

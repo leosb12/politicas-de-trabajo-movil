@@ -6,6 +6,10 @@ class TramiteDisponible {
     required this.tipoPolitica,
     required this.departamentoInicioId,
     required this.departamentoInicioNombre,
+    this.requierePago = false,
+    this.montoPago,
+    this.monedaPago,
+    this.descripcionPago,
   });
 
   final String id;
@@ -14,4 +18,8 @@ class TramiteDisponible {
   final String tipoPolitica;
   final String? departamentoInicioId;
   final String? departamentoInicioNombre;
+  final bool requierePago;
+  final double? montoPago;
+  final String? monedaPago;
+  final String? descripcionPago;
 }

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/network/pago_service.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
+import '../../domain/models/tramite_disponible_item.dart';
+import '../../../pagos/presentation/widgets/pago_bottom_sheet.dart';
 import '../viewmodels/iniciar_tramite_providers.dart';
 import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/mobile_shell_providers.dart';
@@ -16,6 +19,120 @@ class IniciarTramiteView extends ConsumerStatefulWidget {
 
 class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
   String? _requestedUserId;
+
+  bool _requierePagoValido(TramiteDisponibleItem tramite) {
+    if (!tramite.requierePago) {
+      return true;
+    }
+
+    final double? monto = tramite.montoPago;
+    final String? moneda = tramite.monedaPago?.trim();
+    return monto != null && monto > 0 && moneda != null && moneda.isNotEmpty;
+  }
+
+  String _formatearMonto(TramiteDisponibleItem tramite) {
+    final double value = tramite.montoPago ?? 0;
+    final String formattedAmount = value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
+    final String currency = tramite.monedaPago?.trim() ?? '';
+
+    if (currency.isEmpty) {
+      return formattedAmount;
+    }
+
+    return '$formattedAmount $currency';
+  }
+
+  String _descripcionPago(TramiteDisponibleItem tramite) {
+    final String descripcion = tramite.descripcionPago?.trim() ?? '';
+    return descripcion.isNotEmpty ? descripcion : 'Pago de trámite';
+  }
+
+  Future<void> _mostrarPagoModal({
+    required TramiteDisponibleItem tramite,
+    required String actorUserId,
+  }) async {
+    if (!_requierePagoValido(tramite)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Precio no configurado para este trámite.'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return;
+    }
+
+    final PagoService pagoService = PagoService(
+      ref.read(iniciarTramiteDioProvider),
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (BuildContext sheetContext) {
+        return PagoBottomSheet(
+          tramiteNombre: tramite.nombre,
+          actorUserId: actorUserId,
+          tramiteId: tramite.id,
+          pagoService: pagoService,
+          precioTexto: _formatearMonto(tramite),
+          descripcionPago: _descripcionPago(tramite),
+          onStripeSessionId: (_) {},
+          onStripeCheckoutOpened: () {
+            if (!mounted) {
+              return;
+            }
+
+            Navigator.of(sheetContext).pop();
+            ref.read(mobileShellViewModelProvider.notifier).selectTab(1);
+          },
+          onPaypalPagoId: (_) {},
+          onPagoConfirmado: () async {
+            if (mounted) {
+              Navigator.of(sheetContext).pop();
+            }
+
+            final String? error = await ref
+                .read(iniciarTramiteViewModelProvider.notifier)
+                .iniciarTramite(
+                  actorUserId: actorUserId,
+                  tramiteId: tramite.id,
+                );
+
+            if (!context.mounted) {
+              return;
+            }
+
+            final String message = error ?? 'Tramite iniciado correctamente.';
+            final Color backgroundColor = error == null
+                ? Colors.green.shade600
+                : Colors.red.shade700;
+
+            if (error == null) {
+              await ref
+                  .read(misTramitesViewModelProvider.notifier)
+                  .cargarMisTramites(usuarioId: actorUserId);
+
+              if (!context.mounted) {
+                return;
+              }
+
+              ref.read(mobileShellViewModelProvider.notifier).selectTab(1);
+            }
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                backgroundColor: backgroundColor,
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,6 +253,14 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
             tramite: tramite,
             isIniciando: isIniciando,
             onIniciar: () async {
+              if (tramite.requierePago && _requierePagoValido(tramite)) {
+                await _mostrarPagoModal(
+                  tramite: tramite,
+                  actorUserId: actorUserId,
+                );
+                return;
+              }
+
               final String? error = await viewModel.iniciarTramite(
                 actorUserId: actorUserId,
                 tramiteId: tramite.id,

@@ -74,8 +74,24 @@ class IniciarTramiteRemoteDataSource implements IniciarTramiteDataSource {
             nombre: (item['nombre'] as String? ?? '').trim(),
             descripcion: (item['descripcion'] as String? ?? '').trim(),
             categoria: 'Tramite',
+            requierePago: item['requierePago'] as bool? ?? false,
+            montoPago: _readMontoPago(item['montoPago']),
+            monedaPago: item['monedaPago'] as String?,
+            descripcionPago: item['descripcionPago'] as String?,
           );
         })
         .toList(growable: false);
+  }
+
+  double? _readMontoPago(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      return double.tryParse(value);
+    }
+
+    return null;
   }
 }
