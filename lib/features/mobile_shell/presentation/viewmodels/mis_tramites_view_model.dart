@@ -24,7 +24,11 @@ class MisTramitesViewModel extends StateNotifier<MisTramitesState> {
         usuarioId: usuarioId,
       );
 
-      state = state.copyWith(isLoading: false, tramites: items, clearError: true);
+      state = state.copyWith(
+        isLoading: false,
+        tramites: items,
+        clearError: true,
+      );
     } on ApiFailure catch (failure) {
       state = state.copyWith(
         isLoading: false,
@@ -33,12 +37,12 @@ class MisTramitesViewModel extends StateNotifier<MisTramitesState> {
         errorMessage: failure.message,
       );
       return;
-    } catch (_) {
+    } catch (error) {
       state = state.copyWith(
         isLoading: false,
         tramites: <MisTramiteItem>[],
         lastLoadedUserId: usuarioId,
-        errorMessage: 'No se pudieron cargar tus trámites.',
+        errorMessage: error.toString(),
       );
       return;
     }

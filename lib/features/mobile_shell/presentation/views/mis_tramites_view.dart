@@ -7,20 +7,30 @@ import '../viewmodels/mis_tramites_providers.dart';
 import '../widgets/mis_tramite_card.dart';
 import 'tramite_seguimiento_view.dart';
 
-class MisTramitesView extends ConsumerWidget {
+class MisTramitesView extends ConsumerStatefulWidget {
   const MisTramitesView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MisTramitesView> createState() => _MisTramitesViewState();
+}
+
+class _MisTramitesViewState extends ConsumerState<MisTramitesView> {
+  String? _requestedUserId;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(misTramitesViewModelProvider);
     final viewModel = ref.read(misTramitesViewModelProvider.notifier);
     final String userId =
         ref.watch(authViewModelProvider).authenticatedUser?.id.trim() ?? '';
 
-    if (userId.isNotEmpty &&
-        !state.isLoading &&
-        state.lastLoadedUserId != userId) {
+    if (userId.isNotEmpty && _requestedUserId != userId && !state.isLoading) {
+      _requestedUserId = userId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
         viewModel.cargarMisTramites(usuarioId: userId);
       });
     }
@@ -60,11 +70,10 @@ class MisTramitesView extends ConsumerWidget {
               Text(state.errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: userId.isEmpty
-                    ? null
-                    : () {
-                        viewModel.cargarMisTramites(usuarioId: userId);
-                      },
+                onPressed: () {
+                  _requestedUserId = userId;
+                  viewModel.cargarMisTramites(usuarioId: userId);
+                },
                 child: const Text('Reintentar'),
               ),
             ],
@@ -83,12 +92,13 @@ class MisTramitesView extends ConsumerWidget {
               const Icon(Icons.inbox_outlined, size: 56),
               const SizedBox(height: 12),
               const Text(
-                'Todavía no tienes trámites iniciados.',
+                'Todavia no tienes tramites iniciados.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () {
+                  _requestedUserId = userId;
                   viewModel.cargarMisTramites(usuarioId: userId);
                 },
                 child: const Text('Actualizar'),
@@ -100,7 +110,10 @@ class MisTramitesView extends ConsumerWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () => viewModel.cargarMisTramites(usuarioId: userId),
+      onRefresh: () {
+        _requestedUserId = userId;
+        return viewModel.cargarMisTramites(usuarioId: userId);
+      },
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),

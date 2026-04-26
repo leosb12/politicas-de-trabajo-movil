@@ -11,161 +11,100 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
   MisTramitesRemoteDataSource(this._dio);
 
   final Dio _dio;
+  static const int _defaultPage = 0;
+  static const int _defaultSize = 50;
 
   @override
-  Future<List<MisTramiteItem>> obtenerMisTramites({required String usuarioId}) {
-    return _executeWithFallback((Dio dio) async {
-      final Response<dynamic> response = await dio.get(
-        NetworkConstants.instanciasPath,
+  Future<List<MisTramiteItem>> obtenerMisTramites({
+    required String usuarioId,
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.get(
+        NetworkConstants.misTramitesCardsPath,
+        queryParameters: const <String, dynamic>{
+          'page': _defaultPage,
+          'size': _defaultSize,
+        },
         options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
       );
 
-      return _parseInstancias(data: response.data, usuarioId: usuarioId);
-    });
+      return _parseInstanciasCards(data: response.data, usuarioId: usuarioId);
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
+    } on ApiFailure {
+      rethrow;
+    }
   }
 
   @override
   Future<TramiteSeguimiento> obtenerSeguimiento({
     required String usuarioId,
     required String instanciaId,
-  }) {
-    return _executeWithFallback((Dio dio) async {
-      final Response<dynamic> response = await dio.get(
-        NetworkConstants.instanciaSeguimientoPath(instanciaId),
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.get(
+        NetworkConstants.instanciaFlujoPath(instanciaId),
         options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
       );
 
       return _parseSeguimientoResponse(response.data).toDomain();
-    });
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
+    } on ApiFailure {
+      rethrow;
+    }
   }
 
-  List<MisTramiteItem> _parseInstancias({
+  List<MisTramiteItem> _parseInstanciasCards({
     required dynamic data,
     required String usuarioId,
   }) {
-    if (data is! List<dynamic>) {
+    final dynamic rawContent;
+    if (data is List<dynamic>) {
+      rawContent = data;
+    } else if (data is Map<String, dynamic>) {
+      rawContent = data['content'];
+    } else if (data is Map<dynamic, dynamic>) {
+      rawContent = data['content'];
+    } else {
       throw ApiFailure(message: 'Respuesta invalida del servidor.');
     }
 
-    return data
+    if (rawContent is! List<dynamic>) {
+      throw ApiFailure(message: 'Respuesta invalida del servidor.');
+    }
+
+    return rawContent
         .map((dynamic rawItem) {
-          if (rawItem is! Map<String, dynamic>) {
+          final Map<String, dynamic>? item = _asJsonMap(rawItem);
+          if (item == null) {
             throw ApiFailure(message: 'Respuesta invalida del servidor.');
           }
 
-          final String id = (rawItem['id'] as String? ?? '').trim();
+          final String id = _stringValue(item['id']);
           if (id.isEmpty) {
             throw ApiFailure(
               message: 'El servidor devolvio una instancia invalida.',
             );
           }
 
-          final String estadoRaw = (rawItem['estadoInstancia'] as String? ?? '')
-              .trim()
-              .toUpperCase();
-
-          final int totalTareas = _toInt(rawItem['totalTareas']);
-          final int tareasCompletadas = _toInt(rawItem['tareasCompletadas']);
+          final String estadoRaw = _stringValue(
+            item['estadoInstancia'],
+          ).toUpperCase();
 
           return MisTramiteItem(
             id: id,
             usuarioId: usuarioId,
-            nombre: (rawItem['politicaNombre'] as String? ?? '').trim().isEmpty
-                ? 'Trámite sin nombre'
-                : (rawItem['politicaNombre'] as String).trim(),
+            codigoTramite: _stringValue(item['codigoTramite']),
+            nombre: _stringValue(item['nombre']).isEmpty
+                ? 'Tramite sin nombre'
+                : _stringValue(item['nombre']),
             estado: _normalizarEstado(estadoRaw),
-            progreso: _calcularProgreso(
-              estadoRaw: estadoRaw,
-              totalTareas: totalTareas,
-              tareasCompletadas: tareasCompletadas,
-            ),
-            actualizadoEn: _parseDateTime(
-              rawItem['fechaActualizacion'] ?? rawItem['fechaCreacion'],
-            ),
+            progreso: _estimarProgresoPorEstado(estadoRaw),
+            fechaCreacion: _parseDateTime(item['fechaCreacion']),
           );
         })
         .toList(growable: false);
-  }
-
-  Future<T> _executeWithFallback<T>(Future<T> Function(Dio dio) action) async {
-    final List<String> candidateBaseUrls = NetworkConstants.candidateBaseUrls(
-      currentBaseUrl: _dio.options.baseUrl,
-    );
-
-    ApiFailure? firstFatalFailure;
-    DioException? lastRetryableException;
-
-    for (final String baseUrl in candidateBaseUrls) {
-      final Dio dio = _buildDioFor(baseUrl: baseUrl);
-
-      try {
-        final T result = await action(dio);
-        _dio.options.baseUrl = baseUrl;
-        return result;
-      } on DioException catch (exception) {
-        if (_isRetryableNetworkError(exception)) {
-          lastRetryableException = exception;
-          continue;
-        }
-
-        firstFatalFailure ??= ApiFailure.fromDioException(exception);
-        continue;
-      } on ApiFailure catch (failure) {
-        firstFatalFailure ??= failure;
-        continue;
-      }
-    }
-
-    if (firstFatalFailure != null) {
-      throw firstFatalFailure;
-    }
-
-    if (lastRetryableException != null) {
-      throw ApiFailure.fromDioException(lastRetryableException);
-    }
-
-    throw ApiFailure(
-      message: 'No se encontro una URL base valida para el backend.',
-    );
-  }
-
-  Dio _buildDioFor({required String baseUrl}) {
-    return Dio(
-      BaseOptions(
-        baseUrl: baseUrl,
-        connectTimeout: _dio.options.connectTimeout,
-        receiveTimeout: _dio.options.receiveTimeout,
-        sendTimeout: _dio.options.sendTimeout,
-        headers: Map<String, dynamic>.from(_dio.options.headers),
-      ),
-    );
-  }
-
-  bool _isRetryableNetworkError(DioException exception) {
-    switch (exception.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
-      case DioExceptionType.receiveTimeout:
-      case DioExceptionType.connectionError:
-        return true;
-      case DioExceptionType.badCertificate:
-      case DioExceptionType.cancel:
-      case DioExceptionType.badResponse:
-      case DioExceptionType.unknown:
-        return false;
-    }
-  }
-
-  int _toInt(dynamic value) {
-    if (value is int) {
-      return value;
-    }
-
-    if (value is num) {
-      return value.toInt();
-    }
-
-    return 0;
   }
 
   String _normalizarEstado(String estadoRaw) {
@@ -183,15 +122,7 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     }
   }
 
-  double _calcularProgreso({
-    required String estadoRaw,
-    required int totalTareas,
-    required int tareasCompletadas,
-  }) {
-    if (totalTareas > 0) {
-      return (tareasCompletadas / totalTareas).clamp(0, 1);
-    }
-
+  double _estimarProgresoPorEstado(String estadoRaw) {
     switch (estadoRaw) {
       case 'FINALIZADA':
         return 1;
@@ -216,6 +147,25 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     }
 
     return DateTime.now();
+  }
+
+  String _stringValue(dynamic value) {
+    return value?.toString().trim() ?? '';
+  }
+
+  Map<String, dynamic>? _asJsonMap(dynamic value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+
+    if (value is Map<dynamic, dynamic>) {
+      return value.map(
+        (dynamic key, dynamic value) =>
+            MapEntry<String, dynamic>(key.toString(), value),
+      );
+    }
+
+    return null;
   }
 
   TramiteSeguimientoModel _parseSeguimientoResponse(dynamic data) {

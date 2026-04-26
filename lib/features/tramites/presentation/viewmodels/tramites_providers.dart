@@ -1,8 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/network/api_client.dart';
-import '../../../../core/network/network_constants.dart';
+import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../data/datasource/tramites_remote_datasource.dart';
 import '../../data/repositories/tramites_repository_impl.dart';
 import '../../domain/repositories/tramites_repository.dart';
@@ -11,12 +10,8 @@ import '../../domain/usecases/obtener_tramites_disponibles_usecase.dart';
 import 'tramites_state.dart';
 import 'tramites_view_model.dart';
 
-final tramitesApiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(baseUrl: NetworkConstants.baseUrl);
-});
-
 final tramitesDioProvider = Provider<Dio>((ref) {
-  return ref.watch(tramitesApiClientProvider).dio;
+  return ref.watch(dioProvider);
 });
 
 final tramitesRemoteDataSourceProvider = Provider<TramitesRemoteDataSource>((

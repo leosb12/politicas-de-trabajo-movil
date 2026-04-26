@@ -16,7 +16,10 @@ import 'auth_view_model.dart';
 import 'login_state.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(baseUrl: NetworkConstants.baseUrl);
+  return ApiClient(
+    baseUrl: NetworkConstants.baseUrl,
+    fallbackBaseUrls: NetworkConstants.baseUrls.skip(1).toList(),
+  );
 });
 
 final dioProvider = Provider<Dio>((ref) {

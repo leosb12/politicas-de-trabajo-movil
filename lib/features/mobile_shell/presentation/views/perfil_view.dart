@@ -6,8 +6,15 @@ import '../viewmodels/perfil_providers.dart';
 import '../widgets/perfil_header_card.dart';
 import '../widgets/perfil_info_tile.dart';
 
-class PerfilView extends ConsumerWidget {
+class PerfilView extends ConsumerStatefulWidget {
   const PerfilView({super.key});
+
+  @override
+  ConsumerState<PerfilView> createState() => _PerfilViewState();
+}
+
+class _PerfilViewState extends ConsumerState<PerfilView> {
+  String? _requestedUserId;
 
   Future<void> _confirmarCerrarSesion(
     BuildContext context,
@@ -17,8 +24,8 @@ class PerfilView extends ConsumerWidget {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Cerrar sesión'),
-          content: const Text('¿Seguro que quieres cerrar sesión?'),
+          title: const Text('Cerrar sesion'),
+          content: const Text('Seguro que quieres cerrar sesion?'),
           actions: <Widget>[
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -26,7 +33,7 @@ class PerfilView extends ConsumerWidget {
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Cerrar sesión'),
+              child: const Text('Cerrar sesion'),
             ),
           ],
         );
@@ -39,14 +46,19 @@ class PerfilView extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(perfilViewModelProvider);
     final viewModel = ref.read(perfilViewModelProvider.notifier);
     final authState = ref.watch(authViewModelProvider);
     final String userId = authState.authenticatedUser?.id.trim() ?? '';
 
-    if (userId.isNotEmpty && state.lastLoadedUserId != userId) {
+    if (userId.isNotEmpty && _requestedUserId != userId && !state.isLoading) {
+      _requestedUserId = userId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
         viewModel.cargarPerfil(usuarioId: userId);
       });
     }
@@ -70,6 +82,7 @@ class PerfilView extends ConsumerWidget {
                 onPressed: userId.isEmpty
                     ? null
                     : () {
+                        _requestedUserId = userId;
                         viewModel.cargarPerfil(usuarioId: userId);
                       },
                 child: const Text('Reintentar'),
@@ -78,7 +91,7 @@ class PerfilView extends ConsumerWidget {
               OutlinedButton.icon(
                 onPressed: () => _confirmarCerrarSesion(context, ref),
                 icon: const Icon(Icons.logout_rounded),
-                label: const Text('Cerrar sesión'),
+                label: const Text('Cerrar sesion'),
               ),
             ],
           ),
@@ -106,6 +119,7 @@ class PerfilView extends ConsumerWidget {
                 onPressed: userId.isEmpty
                     ? null
                     : () {
+                        _requestedUserId = userId;
                         viewModel.cargarPerfil(usuarioId: userId);
                       },
                 child: const Text('Actualizar'),
@@ -114,7 +128,7 @@ class PerfilView extends ConsumerWidget {
               OutlinedButton.icon(
                 onPressed: () => _confirmarCerrarSesion(context, ref),
                 icon: const Icon(Icons.logout_rounded),
-                label: const Text('Cerrar sesión'),
+                label: const Text('Cerrar sesion'),
               ),
             ],
           ),
@@ -134,7 +148,8 @@ class PerfilView extends ConsumerWidget {
         if (state.mostrarDepartamento)
           PerfilInfoTile(
             label: 'Departamento',
-            value: (perfil.departamento == null ||
+            value:
+                (perfil.departamento == null ||
                     perfil.departamento!.trim().isEmpty)
                 ? 'Sin departamento'
                 : perfil.departamento!,
@@ -143,7 +158,7 @@ class PerfilView extends ConsumerWidget {
         OutlinedButton.icon(
           onPressed: () => _confirmarCerrarSesion(context, ref),
           icon: const Icon(Icons.logout_rounded),
-          label: const Text('Cerrar sesión'),
+          label: const Text('Cerrar sesion'),
         ),
       ],
     );

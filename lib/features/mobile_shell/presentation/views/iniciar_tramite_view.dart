@@ -7,20 +7,32 @@ import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/mobile_shell_providers.dart';
 import '../widgets/tramite_disponible_card.dart';
 
-class IniciarTramiteView extends ConsumerWidget {
+class IniciarTramiteView extends ConsumerStatefulWidget {
   const IniciarTramiteView({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<IniciarTramiteView> createState() => _IniciarTramiteViewState();
+}
+
+class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
+  String? _requestedUserId;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(iniciarTramiteViewModelProvider);
     final viewModel = ref.read(iniciarTramiteViewModelProvider.notifier);
     final String actorUserId =
         ref.watch(authViewModelProvider).authenticatedUser?.id.trim() ?? '';
 
     if (actorUserId.isNotEmpty &&
-        !state.isLoading &&
-        state.lastLoadedUserId != actorUserId) {
+        _requestedUserId != actorUserId &&
+        !state.isLoading) {
+      _requestedUserId = actorUserId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+
         viewModel.cargarTramites(actorUserId: actorUserId);
       });
     }
@@ -39,7 +51,7 @@ class IniciarTramiteView extends ConsumerWidget {
               const Icon(Icons.person_off_outlined, size: 56),
               const SizedBox(height: 12),
               const Text(
-                'No se pudo identificar al usuario actual para consultar trámites.',
+                'No se pudo identificar al usuario actual para consultar tramites.',
                 textAlign: TextAlign.center,
               ),
             ],
@@ -61,6 +73,7 @@ class IniciarTramiteView extends ConsumerWidget {
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () {
+                  _requestedUserId = actorUserId;
                   viewModel.cargarTramites(actorUserId: actorUserId);
                 },
                 child: const Text('Reintentar'),
@@ -81,12 +94,13 @@ class IniciarTramiteView extends ConsumerWidget {
               const Icon(Icons.inbox_outlined, size: 56),
               const SizedBox(height: 12),
               const Text(
-                'No hay trámites activos disponibles en este momento.',
+                'No hay tramites activos disponibles en este momento.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () {
+                  _requestedUserId = actorUserId;
                   viewModel.cargarTramites(actorUserId: actorUserId);
                 },
                 child: const Text('Actualizar'),
@@ -98,7 +112,10 @@ class IniciarTramiteView extends ConsumerWidget {
     }
 
     return RefreshIndicator(
-      onRefresh: () => viewModel.cargarTramites(actorUserId: actorUserId),
+      onRefresh: () {
+        _requestedUserId = actorUserId;
+        return viewModel.cargarTramites(actorUserId: actorUserId);
+      },
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -107,7 +124,7 @@ class IniciarTramiteView extends ConsumerWidget {
         itemBuilder: (BuildContext context, int index) {
           if (index == 0) {
             return Text(
-              'Selecciona un trámite activo para iniciar una nueva instancia.',
+              'Selecciona un tramite activo para iniciar una nueva instancia.',
               style: Theme.of(context).textTheme.bodyMedium,
             );
           }
@@ -128,7 +145,7 @@ class IniciarTramiteView extends ConsumerWidget {
                 return;
               }
 
-              final String message = error ?? 'Trámite iniciado correctamente.';
+              final String message = error ?? 'Tramite iniciado correctamente.';
               final Color backgroundColor = error == null
                   ? Colors.green.shade600
                   : Colors.red.shade700;

@@ -2,34 +2,38 @@ class MisTramiteItem {
   const MisTramiteItem({
     required this.id,
     required this.usuarioId,
+    required this.codigoTramite,
     required this.nombre,
     required this.estado,
     required this.progreso,
-    required this.actualizadoEn,
+    required this.fechaCreacion,
   });
 
   final String id;
   final String usuarioId;
+  final String codigoTramite;
   final String nombre;
   final String estado;
   final double progreso;
-  final DateTime actualizadoEn;
+  final DateTime fechaCreacion;
 
   MisTramiteItem copyWith({
     String? id,
     String? usuarioId,
+    String? codigoTramite,
     String? nombre,
     String? estado,
     double? progreso,
-    DateTime? actualizadoEn,
+    DateTime? fechaCreacion,
   }) {
     return MisTramiteItem(
       id: id ?? this.id,
       usuarioId: usuarioId ?? this.usuarioId,
+      codigoTramite: codigoTramite ?? this.codigoTramite,
       nombre: nombre ?? this.nombre,
       estado: estado ?? this.estado,
       progreso: progreso ?? this.progreso,
-      actualizadoEn: actualizadoEn ?? this.actualizadoEn,
+      fechaCreacion: fechaCreacion ?? this.fechaCreacion,
     );
   }
 }

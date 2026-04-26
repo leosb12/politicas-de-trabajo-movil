@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_failure.dart';
+import '../../../auth/presentation/viewmodels/auth_providers.dart';
+import '../../../guia_usuario_movil/dominio/modelos/contexto_guia_usuario_movil.dart';
+import '../../../guia_usuario_movil/presentacion/widgets/boton_guia_usuario_movil.dart';
 import '../../domain/models/tarea_formulario_detalle.dart';
 import '../viewmodels/tarea_formulario_providers.dart';
 
@@ -306,8 +309,22 @@ class _TareaFormularioPendienteViewState
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authViewModelProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Completar tarea')),
+      floatingActionButton: BotonGuiaUsuarioMovil(
+        heroTag: 'guia_formulario_${widget.tareaId}',
+        usuarioId: widget.usuarioId,
+        nombreUsuario: authState.authenticatedUser?.nombre.trim() ?? '',
+        pantalla: PantallasGuiaUsuarioMovil.formularioSolicitud,
+        contexto: _construirContextoGuia(),
+        preguntasSugeridas: const <String>[
+          '¿Qué tengo que completar aquí?',
+          '¿Qué documentos me faltan?',
+          '¿Cómo subo un documento?',
+        ],
+      ),
       body: SafeArea(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
@@ -592,6 +609,64 @@ class _TareaFormularioPendienteViewState
     final String month = value.month.toString().padLeft(2, '0');
     final String day = value.day.toString().padLeft(2, '0');
     return '${value.year}-$month-$day';
+  }
+
+  ContextoGuiaUsuarioMovil _construirContextoGuia() {
+    final TareaFormularioDetalle? detalle = _detalle;
+    final List<String> documentosFaltantes = detalle == null
+        ? const <String>[]
+        : _documentosFaltantes(detalle);
+    final List<String> acciones = <String>[
+      'CONSULTAR_ESTADO',
+      'VER_DETALLE_TRAMITE',
+    ];
+    if (documentosFaltantes.isNotEmpty) {
+      acciones.add('SUBIR_DOCUMENTO');
+    }
+
+    return ContextoGuiaUsuarioMovil(
+      tramiteId: widget.instanciaId,
+      etapaActual: EtapaActualGuiaUsuarioMovil(
+        identificador: widget.tareaId,
+        nombre: detalle?.nombreActividad.trim().isNotEmpty == true
+            ? detalle!.nombreActividad
+            : widget.nombreActividad,
+        descripcion:
+            'Completa la informacion solicitada para que el tramite pueda continuar.',
+        responsable: detalle?.responsableTipo ?? 'USUARIO',
+      ),
+      documentosFaltantes: documentosFaltantes,
+      observaciones: _observacionesGuia(detalle),
+      accionesDisponibles: acciones,
+    );
+  }
+
+  List<String> _documentosFaltantes(TareaFormularioDetalle detalle) {
+    final List<String> documentos = <String>[];
+    for (final CampoFormularioDetalle campo in detalle.formularioDefinicion) {
+      if (campo.tipoNormalizado != 'ARCHIVO') {
+        continue;
+      }
+      final String valorActual = _stringValue(
+        detalle.formularioRespuesta[campo.clave],
+      );
+      if (valorActual.trim().isEmpty) {
+        documentos.add(_prettyLabel(campo.clave));
+      }
+    }
+    return documentos;
+  }
+
+  List<String> _observacionesGuia(TareaFormularioDetalle? detalle) {
+    if (detalle == null) {
+      return const <String>[];
+    }
+
+    final String observacion = detalle.observaciones.trim();
+    if (observacion.isEmpty) {
+      return const <String>[];
+    }
+    return <String>[observacion];
   }
 }
 

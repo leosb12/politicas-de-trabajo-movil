@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../auth/presentation/viewmodels/auth_providers.dart';
+import '../../../guia_usuario_movil/dominio/modelos/contexto_guia_usuario_movil.dart';
+import '../../../guia_usuario_movil/presentacion/widgets/boton_guia_usuario_movil.dart';
 import '../../domain/models/mis_tramite_item.dart';
 import '../../domain/models/tramite_seguimiento.dart';
 import '../viewmodels/mis_tramites_providers.dart';
@@ -50,6 +53,7 @@ class _TramiteSeguimientoViewState
     final TramiteSeguimientoState state = ref.watch(
       tramiteSeguimientoViewModelProvider(_args),
     );
+    final authState = ref.watch(authViewModelProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -66,6 +70,19 @@ class _TramiteSeguimientoViewState
                   )
                 : const Icon(Icons.refresh_rounded),
           ),
+        ],
+      ),
+      floatingActionButton: BotonGuiaUsuarioMovil(
+        heroTag: 'guia_tramite_${widget.tramite.id}',
+        usuarioId: widget.usuarioId,
+        nombreUsuario: authState.authenticatedUser?.nombre.trim() ?? '',
+        pantalla: PantallasGuiaUsuarioMovil.detalleTramite,
+        contexto: _construirContextoGuia(state),
+        preguntasSugeridas: const <String>[
+          '¿En qué estado está mi trámite?',
+          '¿Qué significa este estado?',
+          '¿Qué falta para que avance?',
+          '¿Qué pasa después?',
         ],
       ),
       body: SafeArea(child: _buildBody(context, state)),
@@ -111,6 +128,209 @@ class _TramiteSeguimientoViewState
     }
 
     return null;
+  }
+
+  ContextoGuiaUsuarioMovil _construirContextoGuia(
+    TramiteSeguimientoState state,
+  ) {
+    final TramiteSeguimiento? seguimiento = state.seguimiento;
+    final List<String> acciones = <String>[
+      'CONSULTAR_ESTADO',
+      'VER_HISTORIAL',
+      'VER_DETALLE_TRAMITE',
+    ];
+
+    if (seguimiento == null) {
+      return ContextoGuiaUsuarioMovil(
+        tramiteId: widget.tramite.id,
+        nombrePolitica: widget.tramite.nombre,
+        accionesDisponibles: acciones,
+      );
+    }
+
+    final TareaSeguimiento? tareaPendiente = _findPendingUserTask(
+      seguimiento,
+      widget.usuarioId,
+    );
+    if (tareaPendiente != null) {
+      acciones.add('SUBIR_DOCUMENTO');
+    }
+
+    final DepartamentoActualSeguimiento? departamentoActual =
+        seguimiento.departamentosActuales.isEmpty
+        ? null
+        : seguimiento.departamentosActuales.first;
+    final NodoSeguimiento nodoActual = seguimiento.nodos.firstWhere(
+      (NodoSeguimiento nodo) =>
+          seguimiento.nodosActualesIdSet.contains(nodo.id),
+      orElse: () => seguimiento.nodos.isEmpty
+          ? const NodoSeguimiento(
+              id: '',
+              tipo: '',
+              nombre: '',
+              departamentoId: '',
+              departamentoNombre: '',
+              responsableTipo: '',
+              responsableId: '',
+              responsableNombre: '',
+              posX: null,
+              posY: null,
+              estadoSeguimiento: '',
+              tareaActualId: '',
+              estadoTareaActual: '',
+              asignadoA: '',
+              asignadoANombre: '',
+            )
+          : seguimiento.nodos.first,
+    );
+
+    final List<NodoSeguimiento> etapas = seguimiento.nodos
+        .where((NodoSeguimiento nodo) {
+          final String tipo = nodo.tipo.trim().toUpperCase();
+          return tipo == 'ACTIVIDAD' || tipo == 'DECISION';
+        })
+        .toList(growable: false);
+    final int pasosCompletados = etapas
+        .where(
+          (NodoSeguimiento nodo) => _isCompletedStatus(nodo.estadoSeguimiento),
+        )
+        .length;
+    final int pasosPendientes = etapas.length - pasosCompletados;
+    final int porcentajeAvance = etapas.isEmpty
+        ? 0
+        : ((pasosCompletados * 100) / etapas.length).round();
+
+    final List<String> proximosPasos = _construirProximosPasosGuia(seguimiento);
+    final List<HistorialGuiaUsuarioMovil> historial = seguimiento.tareas
+        .where((TareaSeguimiento tarea) => _esTareaCerradaGuia(tarea.estado))
+        .map((TareaSeguimiento tarea) {
+          return HistorialGuiaUsuarioMovil(
+            etapa: tarea.nombre,
+            estado: tarea.estado,
+            responsable: tarea.asignadoANombre.isNotEmpty
+                ? tarea.asignadoANombre
+                : tarea.responsableNombre,
+          );
+        })
+        .take(5)
+        .toList(growable: false);
+
+    final EtapaActualGuiaUsuarioMovil? etapaActual =
+        (departamentoActual == null &&
+            nodoActual.id.isEmpty &&
+            nodoActual.nombre.isEmpty)
+        ? null
+        : EtapaActualGuiaUsuarioMovil(
+            identificador: departamentoActual?.nodoId ?? nodoActual.id,
+            nombre: departamentoActual?.nodoNombre.isNotEmpty == true
+                ? departamentoActual!.nodoNombre
+                : nodoActual.nombre,
+            descripcion: tareaPendiente != null
+                ? 'Hay una tarea abierta asociada a esta etapa.'
+                : '',
+            departamento:
+                departamentoActual?.departamentoNombre ??
+                nodoActual.departamentoNombre,
+            responsable: departamentoActual?.asignadoANombre.isNotEmpty == true
+                ? departamentoActual!.asignadoANombre
+                : (departamentoActual?.responsableNombre ??
+                      nodoActual.responsableNombre),
+          );
+
+    final ResumenProgresoGuiaUsuarioMovil? resumen =
+        etapas.isEmpty &&
+            (etapaActual == null || etapaActual.nombre.trim().isEmpty)
+        ? null
+        : ResumenProgresoGuiaUsuarioMovil(
+            pasosCompletados: pasosCompletados,
+            pasoActual: etapaActual?.nombre ?? '',
+            pasosPendientes: pasosPendientes < 0 ? 0 : pasosPendientes,
+            porcentajeAvance: porcentajeAvance,
+          );
+
+    return ContextoGuiaUsuarioMovil(
+      tramiteId: seguimiento.instanciaId.isNotEmpty
+          ? seguimiento.instanciaId
+          : widget.tramite.id,
+      politicaId: seguimiento.politicaId,
+      nombrePolitica: seguimiento.politicaNombre.isNotEmpty
+          ? seguimiento.politicaNombre
+          : widget.tramite.nombre,
+      estadoTramite: _estadoTramiteGuia(seguimiento),
+      etapaActual: etapaActual,
+      resumenProgreso: resumen,
+      historial: historial,
+      proximosPasos: proximosPasos,
+      accionesDisponibles: acciones,
+    );
+  }
+
+  List<String> _construirProximosPasosGuia(TramiteSeguimiento seguimiento) {
+    final Map<String, String> nombresPorNodo = <String, String>{
+      for (final NodoSeguimiento nodo in seguimiento.nodos)
+        nodo.id: _fallback(nodo.nombre, _tipoLabel(nodo.tipo)),
+    };
+    final Set<String> actuales = seguimiento.nodosActualesIdSet;
+    final Set<String> proximos = <String>{};
+
+    for (final ConexionSeguimiento conexion in seguimiento.conexiones) {
+      if (!actuales.contains(conexion.origen)) {
+        continue;
+      }
+
+      final String nombre = nombresPorNodo[conexion.destino] ?? '';
+      if (nombre.trim().isNotEmpty && !actuales.contains(conexion.destino)) {
+        proximos.add(nombre);
+      }
+    }
+
+    if (proximos.isNotEmpty) {
+      return proximos.take(4).toList(growable: false);
+    }
+
+    for (final NodoSeguimiento nodo in seguimiento.nodos) {
+      if (_isPendingStatus(nodo.estadoSeguimiento)) {
+        proximos.add(_fallback(nodo.nombre, _tipoLabel(nodo.tipo)));
+      }
+      if (proximos.length >= 4) {
+        break;
+      }
+    }
+
+    return proximos.toList(growable: false);
+  }
+
+  String _estadoTramiteGuia(TramiteSeguimiento seguimiento) {
+    final bool tieneRechazo = seguimiento.tareas.any((TareaSeguimiento tarea) {
+      final String estado = tarea.estado.trim().toUpperCase();
+      return estado == 'RECHAZADA' || estado == 'RECHAZADO';
+    });
+    if (tieneRechazo) {
+      return 'RECHAZADO';
+    }
+
+    switch (seguimiento.estadoInstancia.trim().toUpperCase()) {
+      case 'EN_CURSO':
+        return 'EN_PROCESO';
+      case 'PAUSADA':
+        return 'DETENIDO';
+      case 'FINALIZADA':
+        return 'FINALIZADO';
+      case 'CANCELADA':
+        return 'CANCELADO';
+      default:
+        return seguimiento.estadoInstancia.trim();
+    }
+  }
+
+  bool _esTareaCerradaGuia(String estado) {
+    final String normalizado = estado.trim().toUpperCase();
+    return normalizado == 'COMPLETADA' ||
+        normalizado == 'COMPLETADO' ||
+        normalizado == 'RECHAZADA' ||
+        normalizado == 'RECHAZADO' ||
+        normalizado == 'CANCELADA' ||
+        normalizado == 'CANCELADO';
   }
 
   Widget _buildBody(BuildContext context, TramiteSeguimientoState state) {

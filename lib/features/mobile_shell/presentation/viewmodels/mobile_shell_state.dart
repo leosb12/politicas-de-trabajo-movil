@@ -2,7 +2,7 @@ class MobileShellState {
   const MobileShellState({required this.currentIndex});
 
   factory MobileShellState.initial() {
-    return const MobileShellState(currentIndex: 0);
+    return const MobileShellState(currentIndex: 1);
   }
 
   final int currentIndex;

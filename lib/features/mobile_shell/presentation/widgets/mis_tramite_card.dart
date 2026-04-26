@@ -23,9 +23,16 @@ class MisTramiteCard extends StatelessWidget {
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
+            if (item.codigoTramite.trim().isNotEmpty) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                item.codigoTramite,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ],
             const SizedBox(height: 6),
             Text(
-              'Última actualización: ${_formatDate(item.actualizadoEn)}',
+              'Creado: ${_formatDate(item.fechaCreacion)}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 14),
@@ -39,7 +46,7 @@ class MisTramiteCard extends StatelessWidget {
               child: FilledButton.icon(
                 onPressed: onVerSeguimiento,
                 icon: const Icon(Icons.account_tree_outlined),
-                label: const Text('Ver flujo del trámite'),
+                label: const Text('Ver flujo del tramite'),
               ),
             ),
           ],
