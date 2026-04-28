@@ -7,15 +7,16 @@ class NetworkConstants {
     'API_BASE_URL',
     defaultValue: '',
   );
-  static const String _configuredFallbackBaseUrls = String.fromEnvironment(
-    'API_FALLBACK_BASE_URLS',
-    defaultValue: '',
-  );
-  static const String _legacyLanBaseUrl = 'http://192.168.1.16:8080';
+  static const String _legacyLanBaseUrl = 'http://44.201.97.229:8080';
 
   static String get baseUrl => baseUrls.first;
 
   static List<String> get baseUrls {
+    final String configuredBaseUrl = _normalizeBaseUrl(_configuredBaseUrl);
+    if (configuredBaseUrl.isNotEmpty) {
+      return <String>[configuredBaseUrl];
+    }
+
     final List<String> resolved = <String>[];
 
     void addCandidate(String rawUrl) {
@@ -24,12 +25,6 @@ class NetworkConstants {
         return;
       }
       resolved.add(normalized);
-    }
-
-    addCandidate(_configuredBaseUrl);
-
-    for (final String rawUrl in _configuredFallbackBaseUrls.split(',')) {
-      addCandidate(rawUrl);
     }
 
     for (final String rawUrl in _defaultBaseUrlsForCurrentPlatform) {
@@ -45,6 +40,9 @@ class NetworkConstants {
 
   static const String mobileLoginPath = '/api/auth/movil/login';
   static const String mobileRegisterPath = '/api/auth/movil/register';
+  static const String changePasswordPath = '/api/auth/cambiar-contrasena';
+  static const String forgotPasswordPath = '/api/auth/forgot-password';
+  static const String resetPasswordPath = '/api/auth/reset-password';
   static const String availableTramitesPath =
       '/api/politicas/movil/disponibles';
   static const String instanciasPath = '/api/instancias';
@@ -55,6 +53,9 @@ class NetworkConstants {
       '$instanciasPath/mis-tramites/cards';
   static const String tareasPath = '/api/tareas';
   static const String guiaUsuarioMovilPath = '/api/guide/mobile-user';
+  static const String mobileDeviceTokensPath = '/api/mobile/device-tokens';
+  static const String mobileNotificationTestPath =
+      '/api/mobile/notifications/test';
 
   static String pagoPath(String pagoId) {
     final String encodedPagoId = Uri.encodeComponent(pagoId);
@@ -93,14 +94,10 @@ class NetworkConstants {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return const <String>[
-          'http://10.0.2.2:8080',
-          'http://10.0.3.2:8080',
           _legacyLanBaseUrl,
         ];
       case TargetPlatform.iOS:
         return const <String>[
-          'http://127.0.0.1:8080',
-          'http://localhost:8080',
           _legacyLanBaseUrl,
         ];
       case TargetPlatform.macOS:
@@ -108,8 +105,6 @@ class NetworkConstants {
       case TargetPlatform.windows:
       case TargetPlatform.fuchsia:
         return const <String>[
-          'http://localhost:8080',
-          'http://127.0.0.1:8080',
           _legacyLanBaseUrl,
         ];
     }

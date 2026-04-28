@@ -158,6 +158,7 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
         ref.read(tramitesDioProvider),
       );
       final StripeVerificationResult result = await pagoService.verificarStripe(
+        actorUserId: widget.actorUserId,
         sessionId: normalizedSessionId,
       );
 
@@ -628,7 +629,10 @@ class _PagoBottomSheetContentState extends State<_PagoBottomSheetContent> {
 
     try {
       final StripeVerificationResult result = await widget.pagoService
-          .verificarStripe(sessionId: sessionId.trim());
+          .verificarStripe(
+            actorUserId: widget.actorUserId,
+            sessionId: sessionId.trim(),
+          );
 
       if (!result.confirmado) {
         setState(() {
@@ -675,6 +679,7 @@ class _PagoBottomSheetContentState extends State<_PagoBottomSheetContent> {
 
     try {
       final PagoDetalle pago = await widget.pagoService.obtenerPago(
+        actorUserId: widget.actorUserId,
         pagoId: pagoId.trim(),
       );
 

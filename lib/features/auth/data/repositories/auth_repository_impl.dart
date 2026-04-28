@@ -2,8 +2,11 @@ import '../../../../core/storage/session_storage.dart';
 import '../../domain/entities/authenticated_user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../datasource/auth_remote_datasource.dart';
+import '../models/change_password_request_model.dart';
+import '../models/forgot_password_request_model.dart';
 import '../models/login_request_model.dart';
 import '../models/register_request_model.dart';
+import '../models/reset_password_request_model.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl({
@@ -52,6 +55,43 @@ class AuthRepositoryImpl implements AuthRepository {
     final AuthenticatedUser user = response.toEntity();
     await _sessionStorage.saveSession(user.toJson());
     return user;
+  }
+
+  @override
+  Future<void> changePassword({
+    required String correo,
+    required String passwordActual,
+    required String nuevaContrasena,
+    required String confirmarNuevaContrasena,
+  }) {
+    return _remoteDataSource.changePassword(
+      ChangePasswordRequestModel(
+        correo: correo.trim(),
+        passwordActual: passwordActual,
+        nuevaContrasena: nuevaContrasena,
+        confirmarNuevaContrasena: confirmarNuevaContrasena,
+      ),
+    );
+  }
+
+  @override
+  Future<void> forgotPassword({required String email}) {
+    return _remoteDataSource.forgotPassword(
+      ForgotPasswordRequestModel(email: email.trim()),
+    );
+  }
+
+  @override
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) {
+    return _remoteDataSource.resetPassword(
+      ResetPasswordRequestModel(
+        token: token.trim(),
+        newPassword: newPassword,
+      ),
+    );
   }
 
   @override

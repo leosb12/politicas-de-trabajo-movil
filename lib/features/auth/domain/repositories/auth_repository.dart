@@ -12,6 +12,20 @@ abstract class AuthRepository {
     required String password,
   });
 
+  Future<void> changePassword({
+    required String correo,
+    required String passwordActual,
+    required String nuevaContrasena,
+    required String confirmarNuevaContrasena,
+  });
+
+  Future<void> forgotPassword({required String email});
+
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  });
+
   Future<AuthenticatedUser?> getPersistedSession();
 
   Future<void> clearSession();

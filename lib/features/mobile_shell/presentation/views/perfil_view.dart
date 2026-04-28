@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/widgets/app_text_input.dart';
+import '../../../../core/widgets/inline_error_message.dart';
+import '../../../../core/widgets/primary_button.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
+import '../../../auth/presentation/viewmodels/login_state.dart';
 import '../viewmodels/perfil_providers.dart';
 import '../widgets/perfil_header_card.dart';
 import '../widgets/perfil_info_tile.dart';
@@ -15,6 +19,92 @@ class PerfilView extends ConsumerStatefulWidget {
 
 class _PerfilViewState extends ConsumerState<PerfilView> {
   String? _requestedUserId;
+  final GlobalKey<FormState> _changePasswordFormKey = GlobalKey<FormState>();
+  final TextEditingController _currentPasswordController =
+      TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  String? _passwordValidator(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'La contrasena es obligatoria';
+    }
+
+    if (value.trim().length < 6) {
+      return 'La contrasena debe tener al menos 6 caracteres';
+    }
+
+    return null;
+  }
+
+  String? _confirmPasswordValidator(String? value) {
+    final String? passwordError = _passwordValidator(value);
+    if (passwordError != null) {
+      return passwordError;
+    }
+
+    if (value != _newPasswordController.text) {
+      return 'Las contrasenas no coinciden';
+    }
+
+    return null;
+  }
+
+  Future<void> _handleChangePassword() async {
+    FocusScope.of(context).unfocus();
+
+    final FormState? formState = _changePasswordFormKey.currentState;
+    if (formState == null || !formState.validate()) {
+      return;
+    }
+
+    final authState = ref.read(authViewModelProvider);
+    final String correo = authState.authenticatedUser?.correo.trim() ?? '';
+    if (correo.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo identificar el correo actual.'),
+        ),
+      );
+      return;
+    }
+
+    final bool success = await ref
+        .read(authViewModelProvider.notifier)
+        .changePassword(
+          correo: correo,
+          passwordActual: _currentPasswordController.text,
+          nuevaContrasena: _newPasswordController.text,
+          confirmarNuevaContrasena: _confirmPasswordController.text,
+        );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (success) {
+      _changePasswordFormKey.currentState?.reset();
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Contrasena actualizada correctamente.')),
+      );
+    }
+  }
 
   Future<void> _confirmarCerrarSesion(
     BuildContext context,
@@ -50,6 +140,17 @@ class _PerfilViewState extends ConsumerState<PerfilView> {
     final state = ref.watch(perfilViewModelProvider);
     final viewModel = ref.read(perfilViewModelProvider.notifier);
     final authState = ref.watch(authViewModelProvider);
+
+    ref.listen<LoginState>(authViewModelProvider, (previous, next) {
+      final String? previousError = previous?.errorMessage;
+      final String? nextError = next.errorMessage;
+      if (nextError != null && nextError != previousError && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(nextError)));
+      }
+    });
+
     final String userId = authState.authenticatedUser?.id.trim() ?? '';
 
     if (userId.isNotEmpty && _requestedUserId != userId && !state.isLoading) {
@@ -154,6 +255,61 @@ class _PerfilViewState extends ConsumerState<PerfilView> {
                 ? 'Sin departamento'
                 : perfil.departamento!,
           ),
+        const SizedBox(height: 24),
+        Form(
+          key: _changePasswordFormKey,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Cambiar contrasena',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  AppTextInput(
+                    controller: _currentPasswordController,
+                    label: 'Contrasena actual',
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    validator: _passwordValidator,
+                  ),
+                  const SizedBox(height: 14),
+                  AppTextInput(
+                    controller: _newPasswordController,
+                    label: 'Nueva contrasena',
+                    obscureText: true,
+                    textInputAction: TextInputAction.next,
+                    validator: _passwordValidator,
+                  ),
+                  const SizedBox(height: 14),
+                  AppTextInput(
+                    controller: _confirmPasswordController,
+                    label: 'Confirmar nueva contrasena',
+                    obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    validator: _confirmPasswordValidator,
+                    onFieldSubmitted: (_) => _handleChangePassword(),
+                  ),
+                  if (authState.errorMessage != null) ...<Widget>[
+                    const SizedBox(height: 14),
+                    InlineErrorMessage(message: authState.errorMessage!),
+                  ],
+                  const SizedBox(height: 16),
+                  PrimaryButton(
+                    label: 'Actualizar contrasena',
+                    isLoading: authState.isLoading,
+                    onPressed: _handleChangePassword,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 24),
         OutlinedButton.icon(
           onPressed: () => _confirmarCerrarSesion(context, ref),

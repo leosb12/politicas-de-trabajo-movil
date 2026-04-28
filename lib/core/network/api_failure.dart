@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiFailure implements Exception {
   ApiFailure({required this.message, this.statusCode});
@@ -26,12 +27,21 @@ class ApiFailure implements Exception {
       case DioExceptionType.sendTimeout:
       case DioExceptionType.receiveTimeout:
         return ApiFailure(
-          message: 'La solicitud tardo demasiado. Intenta nuevamente.',
+          message: kDebugMode
+              ? 'La solicitud tardo demasiado. '
+                    'tipo=${exception.type.name} '
+                    'url=${exception.requestOptions.uri}'
+              : 'La solicitud tardo demasiado. Intenta nuevamente.',
           statusCode: statusCode,
         );
       case DioExceptionType.connectionError:
         return ApiFailure(
-          message: 'No se pudo conectar con el servidor.',
+          message: kDebugMode
+              ? 'No se pudo conectar con el servidor. '
+                    'tipo=${exception.type.name} '
+                    'url=${exception.requestOptions.uri} '
+                    'detalle=${exception.message}'
+              : 'No se pudo conectar con el servidor.',
           statusCode: statusCode,
         );
       case DioExceptionType.badCertificate:

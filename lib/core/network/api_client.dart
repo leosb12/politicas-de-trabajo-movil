@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
@@ -17,13 +18,14 @@ class ApiClient {
       dio = Dio(
         BaseOptions(
           baseUrl: baseUrls.first,
-          connectTimeout: const Duration(seconds: 3),
-          sendTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 10),
+          connectTimeout: const Duration(seconds: 60),
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
           responseType: ResponseType.json,
           headers: const <String, String>{'Content-Type': 'application/json'},
         ),
       ) {
+    dio.interceptors.add(_DebugNetworkInterceptor());
     dio.interceptors.add(
       InterceptorsWrapper(
         onError:
@@ -196,5 +198,105 @@ class ApiClient {
 
   static String _normalizeBaseUrl(String rawUrl) {
     return rawUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+  }
+}
+
+class _DebugNetworkInterceptor extends Interceptor {
+  static const String _requestStartedAtKey = 'api_client.request_started_at';
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.extra[_requestStartedAtKey] = DateTime.now().millisecondsSinceEpoch;
+
+    _emitLog(
+      '[API][REQUEST] ${options.method} ${options.uri} '
+      'headers=${_sanitizeMap(options.headers)} '
+      'query=${_sanitizeMap(options.queryParameters)} '
+      'body=${_sanitizeData(options.data)}',
+    );
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+    final int elapsedMs = _elapsedMs(response.requestOptions);
+    _emitLog(
+      '[API][RESPONSE] ${response.requestOptions.method} '
+      '${response.requestOptions.uri} '
+      'status=${response.statusCode} '
+      'time=${elapsedMs}ms '
+      'data=${_sanitizeData(response.data)}',
+    );
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final int elapsedMs = _elapsedMs(err.requestOptions);
+    _emitLog(
+      '[API][ERROR] ${err.requestOptions.method} ${err.requestOptions.uri} '
+      'type=${err.type.name} '
+      'status=${err.response?.statusCode} '
+      'time=${elapsedMs}ms '
+      'message=${err.message} '
+      'response=${_sanitizeData(err.response?.data)}',
+    );
+    handler.next(err);
+  }
+
+  int _elapsedMs(RequestOptions options) {
+    final int? startedAt = options.extra[_requestStartedAtKey] as int?;
+    if (startedAt == null) {
+      return -1;
+    }
+
+    return DateTime.now().millisecondsSinceEpoch - startedAt;
+  }
+
+  static Object? _sanitizeData(Object? data) {
+    if (data is Map) {
+      return _sanitizeMap(data);
+    }
+
+    if (data is List) {
+      return data.map<Object?>((Object? item) => _sanitizeData(item)).toList();
+    }
+
+    return data;
+  }
+
+  static Map<String, Object?> _sanitizeMap(Map<dynamic, dynamic> source) {
+    final Map<String, Object?> sanitized = <String, Object?>{};
+
+    source.forEach((dynamic key, dynamic value) {
+      final String normalizedKey = '$key';
+      final String loweredKey = normalizedKey.toLowerCase();
+
+      if (loweredKey.contains('password')) {
+        sanitized[normalizedKey] = '***';
+        return;
+      }
+
+      if (loweredKey == 'authorization') {
+        sanitized[normalizedKey] = 'Bearer ***';
+        return;
+      }
+
+      sanitized[normalizedKey] = switch (value) {
+        Map<dynamic, dynamic>() => _sanitizeMap(value),
+        List<dynamic>() => value
+            .map<Object?>((dynamic item) => _sanitizeData(item))
+            .toList(),
+        _ => value,
+      };
+    });
+
+    return sanitized;
+  }
+
+  static void _emitLog(String message) {
+    debugPrint(message);
+    developer.log(message, name: 'ApiClient');
+    print(message);
   }
 }

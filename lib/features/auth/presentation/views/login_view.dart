@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +10,7 @@ import '../../../../core/widgets/primary_button.dart';
 import '../viewmodels/auth_providers.dart';
 import '../viewmodels/login_state.dart';
 import 'register_view.dart';
+import 'forgot_password_view.dart';
 import '../widgets/login_header.dart';
 
 class LoginView extends ConsumerStatefulWidget {
@@ -32,9 +34,17 @@ class _LoginViewState extends ConsumerState<LoginView> {
 
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
+    final String email = _emailController.text.trim();
+    developer.log(
+      '[AUTH][UI] Login button pressed email=$email',
+      name: 'LoginView',
+    );
+    print('[AUTH][UI] Login button pressed email=$email');
 
     final formState = _formKey.currentState;
     if (formState == null || !formState.validate()) {
+      developer.log('[AUTH][UI] Login form validation failed', name: 'LoginView');
+      print('[AUTH][UI] Login form validation failed');
       return;
     }
 
@@ -52,6 +62,14 @@ class _LoginViewState extends ConsumerState<LoginView> {
     await Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const RegisterView()));
+  }
+
+  Future<void> _goToForgotPassword() async {
+    ref.read(authViewModelProvider.notifier).clearError();
+
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const ForgotPasswordView()));
   }
 
   @override
@@ -116,6 +134,13 @@ class _LoginViewState extends ConsumerState<LoginView> {
                             textInputAction: TextInputAction.done,
                             validator: Validators.password,
                             onFieldSubmitted: (_) => _handleLogin(),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: state.isLoading ? null : _goToForgotPassword,
+                              child: const Text('¿Olvidaste tu contraseña?'),
+                            ),
                           ),
                           if (state.errorMessage != null) ...<Widget>[
                             const SizedBox(height: 14),
