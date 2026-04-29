@@ -102,3 +102,8 @@ android/build/
 # Java heap dumps
 *.hprof
 java_pid*.hprof
+
+*.hprof
+java_pid*.hprof
+hs_err_pid*.log
+
