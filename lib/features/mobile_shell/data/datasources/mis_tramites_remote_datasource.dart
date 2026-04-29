@@ -100,7 +100,7 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
                 ? 'Tramite sin nombre'
                 : _stringValue(item['nombre']),
             estado: _normalizarEstado(estadoRaw),
-            progreso: _estimarProgresoPorEstado(estadoRaw),
+            progreso: _parsePorcentaje(item['porcentaje']),
             fechaCreacion: _parseDateTime(item['fechaCreacion']),
           );
         })
@@ -122,21 +122,6 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     }
   }
 
-  double _estimarProgresoPorEstado(String estadoRaw) {
-    switch (estadoRaw) {
-      case 'FINALIZADA':
-        return 1;
-      case 'CANCELADA':
-        return 1;
-      case 'PAUSADA':
-        return 0.5;
-      case 'EN_CURSO':
-        return 0.2;
-      default:
-        return 0;
-    }
-  }
-
   DateTime _parseDateTime(dynamic value) {
     if (value is String && value.trim().isNotEmpty) {
       try {
@@ -149,8 +134,29 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     return DateTime.now();
   }
 
+  double _parsePorcentaje(dynamic value) {
+    final double? porcentaje = _doubleValue(value);
+    if (porcentaje == null) {
+      return 0;
+    }
+
+    return (porcentaje / 100).clamp(0, 1).toDouble();
+  }
+
   String _stringValue(dynamic value) {
     return value?.toString().trim() ?? '';
+  }
+
+  double? _doubleValue(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      return double.tryParse(value.trim().replaceAll(',', '.'));
+    }
+
+    return null;
   }
 
   Map<String, dynamic>? _asJsonMap(dynamic value) {
