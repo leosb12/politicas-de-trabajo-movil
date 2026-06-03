@@ -56,6 +56,7 @@ class NetworkConstants {
   static const String mobileDeviceTokensPath = '/api/mobile/device-tokens';
   static const String mobileNotificationTestPath =
       '/api/mobile/notifications/test';
+  static const String archivosPath = '/api/archivos';
 
   static String pagoPath(String pagoId) {
     final String encodedPagoId = Uri.encodeComponent(pagoId);

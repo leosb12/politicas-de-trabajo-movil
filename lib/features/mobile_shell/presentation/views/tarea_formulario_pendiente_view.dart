@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/network/api_failure.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
@@ -36,6 +37,9 @@ class _TareaFormularioPendienteViewState
   final Map<String, DateTime?> _dateValues = <String, DateTime?>{};
   final Map<String, List<String>> _checkboxValues = <String, List<String>>{};
   final Map<String, List<List<String>>> _gridValues = <String, List<List<String>>>{};
+  final Map<String, String> _uploadedFileIds = <String, String>{};
+  final Map<String, String> _uploadedFileNames = <String, String>{};
+  final Map<String, bool> _uploadingFields = <String, bool>{};
   final TextEditingController _observacionesController =
       TextEditingController();
 
@@ -109,6 +113,9 @@ class _TareaFormularioPendienteViewState
     _dateValues.clear();
     _checkboxValues.clear();
     _gridValues.clear();
+    _uploadedFileIds.clear();
+    _uploadedFileNames.clear();
+    _uploadingFields.clear();
 
     for (final CampoFormularioDetalle campo in detalle.formularioDefinicion) {
       final dynamic initialValue = detalle.formularioRespuesta[campo.clave];
@@ -155,6 +162,13 @@ class _TareaFormularioPendienteViewState
         case 'LABEL':
           // LABEL does not hold input values
           break;
+        case 'ARCHIVO':
+          final String initialValStr = _stringValue(initialValue);
+          if (initialValStr.isNotEmpty) {
+            _uploadedFileIds[campo.clave] = initialValStr;
+            _uploadedFileNames[campo.clave] = 'Archivo adjunto';
+          }
+          break;
         default:
           _textControllers[campo.clave] = TextEditingController(
             text: _stringValue(initialValue),
@@ -197,19 +211,6 @@ class _TareaFormularioPendienteViewState
   Future<void> _completarTarea() async {
     final TareaFormularioDetalle? detalle = _detalle;
     if (detalle == null || _isSubmitting) {
-      return;
-    }
-
-    final String? archivoNoSoportado = _firstUnsupportedFileField(detalle);
-    if (archivoNoSoportado != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'El campo $archivoNoSoportado requiere archivo y aun no esta disponible en movil.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
       return;
     }
 
@@ -310,9 +311,7 @@ class _TareaFormularioPendienteViewState
           // LABEL is read-only
           break;
         case 'ARCHIVO':
-          final String value = (_textControllers[campo.clave]?.text ?? '')
-              .trim();
-          payload[campo.clave] = value;
+          payload[campo.clave] = _uploadedFileIds[campo.clave] ?? '';
           break;
         case 'TEXTO':
         case 'SELECCION':
@@ -326,19 +325,73 @@ class _TareaFormularioPendienteViewState
     return payload;
   }
 
-  String? _firstUnsupportedFileField(TareaFormularioDetalle detalle) {
-    for (final CampoFormularioDetalle campo in detalle.formularioDefinicion) {
-      if (campo.tipoNormalizado != 'ARCHIVO') {
-        continue;
+  Future<void> _seleccionarArchivo(CampoFormularioDetalle campo) async {
+    if (_uploadingFields[campo.clave] == true) return;
+
+    try {
+      final FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return;
       }
 
-      final dynamic initialValue = detalle.formularioRespuesta[campo.clave];
-      if (_stringValue(initialValue).trim().isEmpty) {
-        return campo.clave;
+      final PlatformFile file = result.files.first;
+      final List<int>? bytes = file.bytes;
+      if (bytes == null) {
+        throw Exception('No se pudo leer el contenido del archivo.');
       }
+
+      setState(() {
+        _uploadingFields[campo.clave] = true;
+      });
+
+      final String fileId = await ref
+          .read(tareaFormularioDataSourceProvider)
+          .subirArchivo(
+            usuarioId: widget.usuarioId,
+            instanciaId: widget.instanciaId,
+            tareaId: widget.tareaId,
+            nombreArchivo: file.name,
+            bytes: bytes,
+          );
+
+      setState(() {
+        _uploadedFileIds[campo.clave] = fileId;
+        _uploadedFileNames[campo.clave] = file.name;
+        _uploadingFields[campo.clave] = false;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Archivo "${file.name}" subido con éxito.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      setState(() {
+        _uploadingFields[campo.clave] = false;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al subir archivo: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
+  }
 
-    return null;
+  void _eliminarArchivo(CampoFormularioDetalle campo) {
+    setState(() {
+      _uploadedFileIds.remove(campo.clave);
+      _uploadedFileNames.remove(campo.clave);
+    });
   }
 
   String? _firstMissingStructuredField(TareaFormularioDetalle detalle) {
@@ -369,6 +422,12 @@ class _TareaFormularioPendienteViewState
           }
           if (hasEmptyCell) {
             return 'celdas del campo "${campo.etiqueta ?? _prettyLabel(campo.clave)}"';
+          }
+          break;
+        case 'ARCHIVO':
+          final String fileId = _uploadedFileIds[campo.clave] ?? _stringValue(detalle.formularioRespuesta[campo.clave]);
+          if (fileId.trim().isEmpty) {
+            return campo.etiqueta ?? _prettyLabel(campo.clave);
           }
           break;
         default:
@@ -450,8 +509,7 @@ class _TareaFormularioPendienteViewState
           _TaskHeaderCard(
             titulo: heading,
             estado: detalle.estadoTarea,
-            requiereArchivoNoSoportado:
-                _firstUnsupportedFileField(detalle) != null,
+            requiereArchivoNoSoportado: false,
           ),
           const SizedBox(height: 14),
           if (detalle.formularioDefinicion.isEmpty)
@@ -777,10 +835,120 @@ class _TareaFormularioPendienteViewState
         );
 
       case 'ARCHIVO':
-        return const _InlineInfo(
-          icon: Icons.attach_file_rounded,
-          message:
-              'Los campos de archivo aun no se pueden cargar desde esta vista movil.',
+        final String? fileName = _uploadedFileNames[campo.clave];
+        final bool isUploading = _uploadingFields[campo.clave] ?? false;
+        final bool hasFile = fileName != null || (_uploadedFileIds[campo.clave] != null);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label + (campo.requerido ? ' *' : ''),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            if (campo.ayuda != null && campo.ayuda!.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                campo.ayuda!,
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: hasFile ? Colors.green.shade300 : Colors.grey.shade400,
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                color: hasFile ? Colors.green.shade50.withOpacity(0.5) : Colors.transparent,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    hasFile ? Icons.check_circle_outline_rounded : Icons.cloud_upload_outlined,
+                    color: hasFile ? Colors.green : Colors.grey,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hasFile ? (fileName ?? 'Archivo adjunto') : 'Subir documento',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: hasFile ? FontWeight.w600 : FontWeight.normal,
+                            color: hasFile ? Colors.green.shade900 : Colors.black87,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (!hasFile && !isUploading)
+                          Text(
+                            campo.placeholder ?? 'Word, Excel, PDF, PowerPoint, Imagen o Video',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                        if (isUploading)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Row(
+                              children: [
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Subiendo archivo...',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (hasFile && !isUploading)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                      onPressed: _isSubmitting ? null : () => _eliminarArchivo(campo),
+                    )
+                  else if (!isUploading)
+                    ElevatedButton.icon(
+                      onPressed: _isSubmitting ? null : () => _seleccionarArchivo(campo),
+                      icon: const Icon(Icons.attach_file, size: 18),
+                      label: const Text('Buscar'),
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
         );
 
       case 'NUMERO':
