@@ -32,10 +32,23 @@ class TareaFormularioDetalle {
 }
 
 class CampoFormularioDetalle {
-  const CampoFormularioDetalle({required this.clave, required this.tipo});
+  const CampoFormularioDetalle({
+    required this.clave,
+    required this.tipo,
+    this.etiqueta,
+    this.requerido = false,
+    this.placeholder,
+    this.ayuda,
+    this.opciones,
+  });
 
   final String clave;
   final String tipo;
+  final String? etiqueta;
+  final bool requerido;
+  final String? placeholder;
+  final String? ayuda;
+  final List<String>? opciones;
 
   String get tipoNormalizado => tipo.trim().toUpperCase();
 }

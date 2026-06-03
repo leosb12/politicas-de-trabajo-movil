@@ -20,7 +20,11 @@ import 'password_recovery_state.dart';
 import 'password_recovery_view_model.dart';
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(baseUrl: NetworkConstants.baseUrl);
+  final List<String> urls = NetworkConstants.baseUrls;
+  return ApiClient(
+    baseUrl: urls.first,
+    fallbackBaseUrls: urls.skip(1).toList(),
+  );
 });
 
 final dioProvider = Provider<Dio>((ref) {

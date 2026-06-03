@@ -34,6 +34,8 @@ class _TareaFormularioPendienteViewState
       <String, TextEditingController>{};
   final Map<String, bool> _booleanValues = <String, bool>{};
   final Map<String, DateTime?> _dateValues = <String, DateTime?>{};
+  final Map<String, List<String>> _checkboxValues = <String, List<String>>{};
+  final Map<String, List<List<String>>> _gridValues = <String, List<List<String>>>{};
   final TextEditingController _observacionesController =
       TextEditingController();
 
@@ -105,6 +107,8 @@ class _TareaFormularioPendienteViewState
     _disposeControllers();
     _booleanValues.clear();
     _dateValues.clear();
+    _checkboxValues.clear();
+    _gridValues.clear();
 
     for (final CampoFormularioDetalle campo in detalle.formularioDefinicion) {
       final dynamic initialValue = detalle.formularioRespuesta[campo.clave];
@@ -114,6 +118,42 @@ class _TareaFormularioPendienteViewState
           break;
         case 'FECHA':
           _dateValues[campo.clave] = _parseDate(initialValue);
+          break;
+        case 'CHECKBOX':
+          if (initialValue is List) {
+            _checkboxValues[campo.clave] = initialValue.map((e) => e.toString()).toList();
+          } else if (initialValue != null && initialValue.toString().isNotEmpty) {
+            _checkboxValues[campo.clave] = initialValue
+                .toString()
+                .split(',')
+                .map((e) => e.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+          } else {
+            _checkboxValues[campo.clave] = <String>[];
+          }
+          break;
+        case 'GRID':
+          final int rows = int.tryParse(campo.placeholder ?? '') ?? 3;
+          final int cols = campo.opciones?.length ?? 2;
+          final List<List<String>> matrix = List<List<String>>.generate(
+            rows,
+            (_) => List<String>.filled(cols, ''),
+          );
+          if (initialValue is List) {
+            for (int r = 0; r < rows && r < initialValue.length; r++) {
+              final dynamic rowVal = initialValue[r];
+              if (rowVal is List) {
+                for (int c = 0; c < cols && c < rowVal.length; c++) {
+                  matrix[r][c] = rowVal[c]?.toString() ?? '';
+                }
+              }
+            }
+          }
+          _gridValues[campo.clave] = matrix;
+          break;
+        case 'LABEL':
+          // LABEL does not hold input values
           break;
         default:
           _textControllers[campo.clave] = TextEditingController(
@@ -260,12 +300,22 @@ class _TareaFormularioPendienteViewState
           final DateTime? value = _dateValues[campo.clave];
           payload[campo.clave] = value?.toIso8601String().split('T').first;
           break;
+        case 'CHECKBOX':
+          payload[campo.clave] = _checkboxValues[campo.clave] ?? <String>[];
+          break;
+        case 'GRID':
+          payload[campo.clave] = _gridValues[campo.clave] ?? <List<String>>[];
+          break;
+        case 'LABEL':
+          // LABEL is read-only
+          break;
         case 'ARCHIVO':
           final String value = (_textControllers[campo.clave]?.text ?? '')
               .trim();
           payload[campo.clave] = value;
           break;
         case 'TEXTO':
+        case 'SELECCION':
         default:
           payload[campo.clave] = (_textControllers[campo.clave]?.text ?? '')
               .trim();
@@ -293,10 +343,32 @@ class _TareaFormularioPendienteViewState
 
   String? _firstMissingStructuredField(TareaFormularioDetalle detalle) {
     for (final CampoFormularioDetalle campo in detalle.formularioDefinicion) {
+      if (!campo.requerido) {
+        continue;
+      }
       switch (campo.tipoNormalizado) {
         case 'FECHA':
           if (_dateValues[campo.clave] == null) {
-            return campo.clave;
+            return campo.etiqueta ?? _prettyLabel(campo.clave);
+          }
+          break;
+        case 'CHECKBOX':
+          final List<String> checked = _checkboxValues[campo.clave] ?? <String>[];
+          if (checked.isEmpty) {
+            return campo.etiqueta ?? _prettyLabel(campo.clave);
+          }
+          break;
+        case 'GRID':
+          final List<List<String>> grid = _gridValues[campo.clave] ?? <List<String>>[];
+          bool hasEmptyCell = false;
+          for (final List<String> row in grid) {
+            if (row.any((cell) => cell.trim().isEmpty)) {
+              hasEmptyCell = true;
+              break;
+            }
+          }
+          if (hasEmptyCell) {
+            return 'celdas del campo "${campo.etiqueta ?? _prettyLabel(campo.clave)}"';
           }
           break;
         default:
@@ -436,9 +508,231 @@ class _TareaFormularioPendienteViewState
   }
 
   Widget _buildField(BuildContext context, CampoFormularioDetalle campo) {
-    final String label = _prettyLabel(campo.clave);
+    final String label = campo.etiqueta != null && campo.etiqueta!.trim().isNotEmpty
+        ? campo.etiqueta!
+        : _prettyLabel(campo.clave);
 
     switch (campo.tipoNormalizado) {
+      case 'LABEL':
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.secondaryContainer.withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                label,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              if (campo.ayuda != null && campo.ayuda!.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  campo.ayuda!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSecondaryContainer,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        );
+
+      case 'SELECCION':
+        final List<String> options = campo.opciones ?? <String>[];
+        final String? currentValue = _textControllers[campo.clave]?.text;
+        final String? selectedValue = options.contains(currentValue) ? currentValue : null;
+
+        return DropdownButtonFormField<String>(
+          value: selectedValue,
+          decoration: InputDecoration(
+            labelText: label + (campo.requerido ? ' *' : ''),
+            hintText: campo.placeholder ?? 'Selecciona una opción',
+            helperText: campo.ayuda,
+            border: const OutlineInputBorder(),
+          ),
+          items: options.map((String option) {
+            return DropdownMenuItem<String>(
+              value: option,
+              child: Text(option),
+            );
+          }).toList(),
+          onChanged: _isSubmitting
+              ? null
+              : (String? newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      _textControllers[campo.clave]?.text = newValue;
+                    });
+                  }
+                },
+          validator: (String? value) {
+            if (campo.requerido && (value == null || value.trim().isEmpty)) {
+              return 'Selecciona una opción.';
+            }
+            return null;
+          },
+        );
+
+      case 'CHECKBOX':
+        final List<String> options = campo.opciones ?? <String>[];
+        final List<String> checkedList = _checkboxValues[campo.clave] ?? <String>[];
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                '$label${campo.requerido ? ' *' : ''}',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              if (campo.ayuda != null && campo.ayuda!.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  campo.ayuda!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              if (options.isEmpty)
+                Text(
+                  'Sin opciones configuradas',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                      ),
+                )
+              else
+                ...options.map((String option) {
+                  final bool isChecked = checkedList.contains(option);
+                  return CheckboxListTile(
+                    title: Text(option),
+                    value: isChecked,
+                    dense: true,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: _isSubmitting
+                        ? null
+                        : (bool? checked) {
+                            setState(() {
+                              final List<String> currentList = List<String>.from(checkedList);
+                              if (checked == true) {
+                                if (!currentList.contains(option)) {
+                                  currentList.add(option);
+                                }
+                              } else {
+                                currentList.remove(option);
+                              }
+                              _checkboxValues[campo.clave] = currentList;
+                            });
+                          },
+                  );
+                }),
+            ],
+          ),
+        );
+
+      case 'GRID':
+        final List<String> columns = campo.opciones ?? <String>[];
+        final List<List<String>> rowsData = _gridValues[campo.clave] ?? <List<String>>[];
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                '$label${campo.requerido ? ' *' : ''}',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              if (campo.ayuda != null && campo.ayuda!.trim().isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  campo.ayuda!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Scrollbar(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Table(
+                    defaultColumnWidth: const FixedColumnWidth(120),
+                    border: TableBorder.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    children: <TableRow>[
+                      if (columns.isNotEmpty)
+                        TableRow(
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          ),
+                          children: columns.map((String colName) {
+                            return Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(
+                                colName,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ...Iterable<int>.generate(rowsData.length).map((int rIdx) {
+                        final List<String> rowCells = rowsData[rIdx];
+                        return TableRow(
+                          children: Iterable<int>.generate(rowCells.length).map((int cIdx) {
+                            final String cellVal = rowCells[cIdx];
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: TextFormField(
+                                initialValue: cellVal,
+                                enabled: !_isSubmitting,
+                                style: const TextStyle(fontSize: 13),
+                                decoration: const InputDecoration(
+                                  hintText: '...',
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                ),
+                                onChanged: (String newVal) {
+                                  rowsData[rIdx][cIdx] = newVal;
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+
       case 'BOOLEANO':
         final bool currentValue = _booleanValues[campo.clave] ?? false;
         return DecoratedBox(
@@ -458,9 +752,12 @@ class _TareaFormularioPendienteViewState
                     });
                   },
             title: Text(label),
-            subtitle: const Text('Seleccion obligatoria'),
+            subtitle: campo.ayuda != null && campo.ayuda!.trim().isNotEmpty
+                ? Text(campo.ayuda!)
+                : const Text('Seleccion obligatoria'),
           ),
         );
+
       case 'FECHA':
         final DateTime? value = _dateValues[campo.clave];
         return InkWell(
@@ -468,21 +765,24 @@ class _TareaFormularioPendienteViewState
           onTap: _isSubmitting ? null : () => _seleccionarFecha(campo),
           child: InputDecorator(
             decoration: InputDecoration(
-              labelText: label,
+              labelText: label + (campo.requerido ? ' *' : ''),
+              helperText: campo.ayuda,
               border: OutlineInputBorder(),
               suffixIcon: const Icon(Icons.calendar_today_rounded),
             ),
             child: Text(
-              value == null ? 'Selecciona una fecha' : _formatDate(value),
+              value == null ? (campo.placeholder ?? 'Selecciona una fecha') : _formatDate(value),
             ),
           ),
         );
+
       case 'ARCHIVO':
         return const _InlineInfo(
           icon: Icons.attach_file_rounded,
           message:
               'Los campos de archivo aun no se pueden cargar desde esta vista movil.',
         );
+
       case 'NUMERO':
         return TextFormField(
           controller: _textControllers[campo.clave],
@@ -490,19 +790,22 @@ class _TareaFormularioPendienteViewState
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: InputDecoration(
             labelText: label,
+            hintText: campo.placeholder,
+            helperText: campo.ayuda,
             border: const OutlineInputBorder(),
           ),
           validator: (String? value) {
             final String normalized = (value ?? '').trim();
-            if (normalized.isEmpty) {
+            if (campo.requerido && normalized.isEmpty) {
               return 'Este campo es obligatorio.';
             }
-            if (_parseNumber(normalized) == null) {
+            if (normalized.isNotEmpty && _parseNumber(normalized) == null) {
               return 'Ingresa un numero valido.';
             }
             return null;
           },
         );
+
       case 'TEXTO':
       default:
         return TextFormField(
@@ -510,10 +813,12 @@ class _TareaFormularioPendienteViewState
           enabled: !_isSubmitting,
           decoration: InputDecoration(
             labelText: label,
+            hintText: campo.placeholder,
+            helperText: campo.ayuda,
             border: const OutlineInputBorder(),
           ),
           validator: (String? value) {
-            if ((value ?? '').trim().isEmpty) {
+            if (campo.requerido && (value ?? '').trim().isEmpty) {
               return 'Este campo es obligatorio.';
             }
             return null;

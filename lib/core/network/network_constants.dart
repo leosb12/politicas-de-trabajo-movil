@@ -7,7 +7,7 @@ class NetworkConstants {
     'API_BASE_URL',
     defaultValue: '',
   );
-  static const String _legacyLanBaseUrl = 'http://44.201.97.229:8080';
+  static const String _legacyLanBaseUrl = 'http://localhost:8080';
 
   static String get baseUrl => baseUrls.first;
 
@@ -94,10 +94,13 @@ class NetworkConstants {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return const <String>[
+          'http://10.0.2.2:8080',
+          'http://localhost:8080',
           _legacyLanBaseUrl,
         ];
       case TargetPlatform.iOS:
         return const <String>[
+          'http://localhost:8080',
           _legacyLanBaseUrl,
         ];
       case TargetPlatform.macOS:
@@ -105,6 +108,8 @@ class NetworkConstants {
       case TargetPlatform.windows:
       case TargetPlatform.fuchsia:
         return const <String>[
+          'http://localhost:8080',
+          'http://127.0.0.1:8080',
           _legacyLanBaseUrl,
         ];
     }

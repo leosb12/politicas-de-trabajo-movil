@@ -60,7 +60,15 @@ class TareaFormularioDetalleModel {
 }
 
 class CampoFormularioDetalleModel {
-  const CampoFormularioDetalleModel({required this.clave, required this.tipo});
+  const CampoFormularioDetalleModel({
+    required this.clave,
+    required this.tipo,
+    this.etiqueta,
+    this.requerido = false,
+    this.placeholder,
+    this.ayuda,
+    this.opciones,
+  });
 
   factory CampoFormularioDetalleModel.fromJson(JsonMap json) {
     return CampoFormularioDetalleModel(
@@ -72,14 +80,34 @@ class CampoFormularioDetalleModel {
         'etiqueta',
       ]),
       tipo: _stringByKeys(json, <String>['tipo']),
+      etiqueta: json['etiqueta'] != null ? _stringValue(json['etiqueta']) : null,
+      requerido: json['requerido'] as bool? ?? false,
+      placeholder: json['placeholder'] != null ? _stringValue(json['placeholder']) : null,
+      ayuda: json['ayuda'] != null ? _stringValue(json['ayuda']) : null,
+      opciones: json['opciones'] is List
+          ? (json['opciones'] as List).map((e) => _stringValue(e)).where((s) => s.isNotEmpty).toList()
+          : null,
     );
   }
 
   final String clave;
   final String tipo;
+  final String? etiqueta;
+  final bool requerido;
+  final String? placeholder;
+  final String? ayuda;
+  final List<String>? opciones;
 
   CampoFormularioDetalle toDomain() {
-    return CampoFormularioDetalle(clave: clave, tipo: tipo);
+    return CampoFormularioDetalle(
+      clave: clave,
+      tipo: tipo,
+      etiqueta: etiqueta,
+      requerido: requerido,
+      placeholder: placeholder,
+      ayuda: ayuda,
+      opciones: opciones,
+    );
   }
 }
 
