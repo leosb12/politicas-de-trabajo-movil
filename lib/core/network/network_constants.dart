@@ -83,6 +83,27 @@ class NetworkConstants {
     return '$tareasPath/$encodedTareaId/completar';
   }
 
+  static String archivosPorInstanciaPath(String instanciaId) {
+    final String encodedInstanciaId = Uri.encodeComponent(instanciaId);
+    return '$archivosPath/by-instancia/$encodedInstanciaId';
+  }
+
+  static String archivoDetallePath(String archivoId) {
+    return '$archivosPath/${Uri.encodeComponent(archivoId)}';
+  }
+
+  static String archivoVerPath(String archivoId) {
+    return '${archivoDetallePath(archivoId)}/view';
+  }
+
+  static String archivoDescargarPath(String archivoId) {
+    return '${archivoDetallePath(archivoId)}/download';
+  }
+
+  static String archivoReemplazarPath(String archivoId) {
+    return '${archivoDetallePath(archivoId)}/replace';
+  }
+
   static List<String> get _defaultBaseUrlsForCurrentPlatform {
     if (kIsWeb) {
       return const <String>[

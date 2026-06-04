@@ -1,12 +1,53 @@
 import '../../domain/models/mis_tramite_item.dart';
 import '../../domain/models/tramite_seguimiento.dart';
 
+class DocumentoArchivoBinario {
+  const DocumentoArchivoBinario({
+    required this.bytes,
+    required this.nombreArchivo,
+    required this.contentType,
+  });
+
+  final List<int> bytes;
+  final String nombreArchivo;
+  final String contentType;
+}
+
 abstract class MisTramitesDataSource {
   Future<List<MisTramiteItem>> obtenerMisTramites({required String usuarioId});
 
   Future<TramiteSeguimiento> obtenerSeguimiento({
     required String usuarioId,
     required String instanciaId,
+  });
+
+  Future<DocumentoArchivoBinario> verDocumento({
+    required String usuarioId,
+    required String archivoId,
+  });
+
+  Future<DocumentoArchivoBinario> descargarDocumento({
+    required String usuarioId,
+    required String archivoId,
+  });
+
+  Future<void> editarDocumento({
+    required String usuarioId,
+    required String archivoId,
+    required String nombreOriginal,
+    required String descripcion,
+  });
+
+  Future<void> reemplazarDocumento({
+    required String usuarioId,
+    required String archivoId,
+    required String nombreArchivo,
+    required List<int> bytes,
+  });
+
+  Future<void> eliminarDocumento({
+    required String usuarioId,
+    required String archivoId,
   });
 }
 
@@ -169,6 +210,49 @@ class MisTramitesMockDataSource implements MisTramitesDataSource {
           asignadoANombre: 'Analista municipal',
         ),
       ],
+      documentos: const <DocumentoSeguimiento>[],
     );
   }
+
+  @override
+  Future<DocumentoArchivoBinario> verDocumento({
+    required String usuarioId,
+    required String archivoId,
+  }) async {
+    return const DocumentoArchivoBinario(
+      bytes: <int>[],
+      nombreArchivo: 'documento.txt',
+      contentType: 'text/plain',
+    );
+  }
+
+  @override
+  Future<DocumentoArchivoBinario> descargarDocumento({
+    required String usuarioId,
+    required String archivoId,
+  }) {
+    return verDocumento(usuarioId: usuarioId, archivoId: archivoId);
+  }
+
+  @override
+  Future<void> editarDocumento({
+    required String usuarioId,
+    required String archivoId,
+    required String nombreOriginal,
+    required String descripcion,
+  }) async {}
+
+  @override
+  Future<void> reemplazarDocumento({
+    required String usuarioId,
+    required String archivoId,
+    required String nombreArchivo,
+    required List<int> bytes,
+  }) async {}
+
+  @override
+  Future<void> eliminarDocumento({
+    required String usuarioId,
+    required String archivoId,
+  }) async {}
 }

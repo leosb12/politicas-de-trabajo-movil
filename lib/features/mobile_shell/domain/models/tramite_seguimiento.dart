@@ -11,6 +11,7 @@ class TramiteSeguimiento {
     required this.nodos,
     required this.conexiones,
     required this.tareas,
+    required this.documentos,
     required this.departamentosActuales,
     required this.nodosActualesIds,
   });
@@ -26,12 +27,53 @@ class TramiteSeguimiento {
   final List<NodoSeguimiento> nodos;
   final List<ConexionSeguimiento> conexiones;
   final List<TareaSeguimiento> tareas;
+  final List<DocumentoSeguimiento> documentos;
   final List<DepartamentoActualSeguimiento> departamentosActuales;
   final List<String> nodosActualesIds;
 
   bool get isEmpty => nodos.isEmpty && conexiones.isEmpty;
 
   Set<String> get nodosActualesIdSet => nodosActualesIds.toSet();
+}
+
+class DocumentoSeguimiento {
+  const DocumentoSeguimiento({
+    required this.id,
+    required this.nombreOriginal,
+    required this.contentType,
+    required this.extension,
+    required this.fechaSubida,
+    required this.subidoPor,
+    required this.subidoPorNombre,
+    required this.estado,
+    required this.tareaId,
+    required this.actividadId,
+    required this.campoId,
+    required this.urlAcceso,
+    required this.puedeVer,
+    required this.puedeDescargar,
+    required this.puedeEditar,
+    required this.puedeReemplazar,
+    required this.puedeEliminar,
+  });
+
+  final String id;
+  final String nombreOriginal;
+  final String contentType;
+  final String extension;
+  final DateTime? fechaSubida;
+  final String subidoPor;
+  final String subidoPorNombre;
+  final String estado;
+  final String tareaId;
+  final String actividadId;
+  final String campoId;
+  final String urlAcceso;
+  final bool puedeVer;
+  final bool puedeDescargar;
+  final bool puedeEditar;
+  final bool puedeReemplazar;
+  final bool puedeEliminar;
 }
 
 class NodoSeguimiento {

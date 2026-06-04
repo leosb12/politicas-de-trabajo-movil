@@ -78,6 +78,7 @@ class TramiteSeguimientoModel {
       tareas: tareas
           .map((TareaSeguimientoModel model) => model.toDomain())
           .toList(growable: false),
+      documentos: const <DocumentoSeguimiento>[],
       departamentosActuales: departamentosActuales
           .map((DepartamentoActualSeguimientoModel model) => model.toDomain())
           .toList(growable: false),

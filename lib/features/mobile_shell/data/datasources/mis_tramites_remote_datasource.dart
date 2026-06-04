@@ -47,11 +47,182 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
         options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
       );
 
-      return _parseSeguimientoResponse(response.data).toDomain();
+      final TramiteSeguimiento seguimiento = _parseSeguimientoResponse(
+        response.data,
+      ).toDomain();
+      final List<DocumentoSeguimiento> documentos =
+          await _obtenerDocumentosVisibles(
+            usuarioId: usuarioId,
+            instanciaId: instanciaId,
+          );
+
+      return TramiteSeguimiento(
+        instanciaId: seguimiento.instanciaId,
+        politicaId: seguimiento.politicaId,
+        politicaNombre: seguimiento.politicaNombre,
+        codigoTramite: seguimiento.codigoTramite,
+        estadoInstancia: seguimiento.estadoInstancia,
+        laneOrientation: seguimiento.laneOrientation,
+        laneWidth: seguimiento.laneWidth,
+        laneHeight: seguimiento.laneHeight,
+        nodos: seguimiento.nodos,
+        conexiones: seguimiento.conexiones,
+        tareas: seguimiento.tareas,
+        documentos: documentos,
+        departamentosActuales: seguimiento.departamentosActuales,
+        nodosActualesIds: seguimiento.nodosActualesIds,
+      );
     } on DioException catch (exception) {
       throw ApiFailure.fromDioException(exception);
     } on ApiFailure {
       rethrow;
+    }
+  }
+
+  Future<List<DocumentoSeguimiento>> _obtenerDocumentosVisibles({
+    required String usuarioId,
+    required String instanciaId,
+  }) async {
+    final Response<dynamic> response = await _dio.get(
+      NetworkConstants.archivosPorInstanciaPath(instanciaId),
+      options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+    );
+
+    final dynamic raw = response.data;
+    if (raw is! List<dynamic>) {
+      return const <DocumentoSeguimiento>[];
+    }
+
+    return raw
+        .map(_asJsonMap)
+        .whereType<Map<String, dynamic>>()
+        .map(_parseDocumentoSeguimiento)
+        .where((DocumentoSeguimiento item) => item.puedeVer)
+        .toList(growable: false);
+  }
+
+  DocumentoSeguimiento _parseDocumentoSeguimiento(Map<String, dynamic> json) {
+    return DocumentoSeguimiento(
+      id: _stringValue(json['id']),
+      nombreOriginal: _stringValue(json['nombreOriginal']),
+      contentType: _stringValue(json['contentType']),
+      extension: _stringValue(json['extension']),
+      fechaSubida: _tryParseDateTime(json['fechaSubida']),
+      subidoPor: _stringValue(json['subidoPor']),
+      subidoPorNombre: _stringValue(json['subidoPorNombre']),
+      estado: _stringValue(json['estado']),
+      tareaId: _stringValue(json['tareaId']),
+      actividadId: _stringValue(json['actividadId']),
+      campoId: _stringValue(json['campoId']),
+      urlAcceso: _stringValue(json['urlAcceso']),
+      puedeVer: _boolValue(json['puedeVer']),
+      puedeDescargar: _boolValue(json['puedeDescargar']),
+      puedeEditar: _boolValue(json['puedeEditar']),
+      puedeReemplazar: _boolValue(json['puedeReemplazar']),
+      puedeEliminar: _boolValue(json['puedeEliminar']),
+    );
+  }
+
+  @override
+  Future<DocumentoArchivoBinario> verDocumento({
+    required String usuarioId,
+    required String archivoId,
+  }) {
+    return _obtenerArchivoBinario(
+      usuarioId: usuarioId,
+      path: NetworkConstants.archivoVerPath(archivoId),
+    );
+  }
+
+  @override
+  Future<DocumentoArchivoBinario> descargarDocumento({
+    required String usuarioId,
+    required String archivoId,
+  }) {
+    return _obtenerArchivoBinario(
+      usuarioId: usuarioId,
+      path: NetworkConstants.archivoDescargarPath(archivoId),
+    );
+  }
+
+  Future<DocumentoArchivoBinario> _obtenerArchivoBinario({
+    required String usuarioId,
+    required String path,
+  }) async {
+    try {
+      final Response<List<int>> response = await _dio.get<List<int>>(
+        path,
+        options: Options(
+          headers: <String, String>{'X-User-Id': usuarioId},
+          responseType: ResponseType.bytes,
+        ),
+      );
+      return DocumentoArchivoBinario(
+        bytes: response.data ?? <int>[],
+        nombreArchivo: _filenameFromDisposition(
+          response.headers.value('content-disposition'),
+        ),
+        contentType: response.headers.value(Headers.contentTypeHeader) ?? '',
+      );
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
+    }
+  }
+
+  @override
+  Future<void> editarDocumento({
+    required String usuarioId,
+    required String archivoId,
+    required String nombreOriginal,
+    required String descripcion,
+  }) async {
+    try {
+      await _dio.patch<dynamic>(
+        NetworkConstants.archivoDetallePath(archivoId),
+        data: <String, String>{
+          'nombreOriginal': nombreOriginal,
+          'descripcion': descripcion,
+        },
+        options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+      );
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
+    }
+  }
+
+  @override
+  Future<void> reemplazarDocumento({
+    required String usuarioId,
+    required String archivoId,
+    required String nombreArchivo,
+    required List<int> bytes,
+  }) async {
+    try {
+      final FormData formData = FormData.fromMap(<String, dynamic>{
+        'archivo': MultipartFile.fromBytes(bytes, filename: nombreArchivo),
+      });
+      await _dio.put<dynamic>(
+        NetworkConstants.archivoReemplazarPath(archivoId),
+        data: formData,
+        options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+      );
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
+    }
+  }
+
+  @override
+  Future<void> eliminarDocumento({
+    required String usuarioId,
+    required String archivoId,
+  }) async {
+    try {
+      await _dio.delete<dynamic>(
+        NetworkConstants.archivoDetallePath(archivoId),
+        options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+      );
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
     }
   }
 
@@ -134,6 +305,13 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     return DateTime.now();
   }
 
+  DateTime? _tryParseDateTime(dynamic value) {
+    if (value is String && value.trim().isNotEmpty) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
+
   double _parsePorcentaje(dynamic value) {
     final double? porcentaje = _doubleValue(value);
     if (porcentaje == null) {
@@ -143,7 +321,7 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     return (porcentaje / 100).clamp(0, 1).toDouble();
   }
 
-  String _stringValue(dynamic value) {
+String _stringValue(dynamic value) {
     return value?.toString().trim() ?? '';
   }
 
@@ -157,6 +335,16 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     }
 
     return null;
+  }
+
+  bool _boolValue(dynamic value) {
+    if (value is bool) {
+      return value;
+    }
+    if (value is String) {
+      return value.trim().toLowerCase() == 'true';
+    }
+    return false;
   }
 
   Map<String, dynamic>? _asJsonMap(dynamic value) {
@@ -190,4 +378,17 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
 
     throw ApiFailure(message: 'Respuesta invalida del servidor.');
   }
+}
+
+String _filenameFromDisposition(String? disposition) {
+  if (disposition == null || disposition.trim().isEmpty) {
+    return 'documento';
+  }
+  final RegExp encoded = RegExp("filename\\*=UTF-8''([^;]+)");
+  final RegExp plain = RegExp('filename="?([^";]+)"?');
+  final RegExpMatch? encodedMatch = encoded.firstMatch(disposition);
+  if (encodedMatch != null) {
+    return Uri.decodeComponent(encodedMatch.group(1) ?? 'documento');
+  }
+  return plain.firstMatch(disposition)?.group(1) ?? 'documento';
 }

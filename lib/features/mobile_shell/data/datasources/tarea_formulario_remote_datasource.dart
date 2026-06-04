@@ -22,6 +22,7 @@ abstract class TareaFormularioDataSource {
     required String usuarioId,
     required String instanciaId,
     required String tareaId,
+    required String campoId,
     required String nombreArchivo,
     required List<int> bytes,
   });
@@ -84,6 +85,7 @@ class TareaFormularioRemoteDataSource implements TareaFormularioDataSource {
     required String usuarioId,
     required String instanciaId,
     required String tareaId,
+    required String campoId,
     required String nombreArchivo,
     required List<int> bytes,
   }) async {
@@ -94,20 +96,23 @@ class TareaFormularioRemoteDataSource implements TareaFormularioDataSource {
       );
 
       final FormData formData = FormData.fromMap(<String, dynamic>{
-        'file': file,
-        'origenCarga': 'MOBILE',
+        'archivo': file,
+        'instanciaId': instanciaId,
+        'tareaId': tareaId,
+        'campoId': campoId,
+        'tramiteId': instanciaId,
+        'usuarioId': usuarioId,
+        'descripcion': 'Adjunto del campo $campoId para tarea $tareaId',
       });
 
-      final String path = '/api/documentos/tramites/${Uri.encodeComponent(instanciaId)}/archivos';
-
       final Response<dynamic> response = await _dio.post<dynamic>(
-        path,
+        NetworkConstants.archivosPath,
         data: formData,
         options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
       );
 
       final JsonMap? json = _toJsonMap(response.data);
-      final String? fileId = json?['archivoId']?.toString() ?? json?['id']?.toString();
+      final String? fileId = json?['id']?.toString();
       if (json == null || fileId == null) {
         throw ApiFailure(message: 'Respuesta inválida al subir el archivo.');
       }

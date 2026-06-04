@@ -354,6 +354,7 @@ class _TareaFormularioPendienteViewState
             usuarioId: widget.usuarioId,
             instanciaId: widget.instanciaId,
             tareaId: widget.tareaId,
+            campoId: campo.clave,
             nombreArchivo: file.name,
             bytes: bytes,
           );

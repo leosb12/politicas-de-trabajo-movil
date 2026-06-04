@@ -1,13 +1,18 @@
+import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../../guia_usuario_movil/dominio/modelos/contexto_guia_usuario_movil.dart';
 import '../../../guia_usuario_movil/presentacion/widgets/boton_guia_usuario_movil.dart';
 import '../../domain/models/mis_tramite_item.dart';
 import '../../domain/models/tramite_seguimiento.dart';
+import '../../data/datasources/mis_tramites_mock_datasource.dart';
 import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/tramite_seguimiento_state.dart';
 import '../viewmodels/tramite_seguimiento_view_model.dart';
@@ -46,6 +51,225 @@ class _TramiteSeguimientoViewState
     return ref
         .read(tramiteSeguimientoViewModelProvider(_args).notifier)
         .cargarSeguimiento();
+  }
+
+  Future<void> _verDocumento(DocumentoSeguimiento document) async {
+    try {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Abriendo documento...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      final DocumentoArchivoBinario file = await ref
+          .read(misTramitesDataSourceProvider)
+          .verDocumento(
+            usuarioId: widget.usuarioId,
+            archivoId: document.id,
+          );
+
+      final String safeName = _safeFileName(
+        file.nombreArchivo.trim().isNotEmpty
+            ? file.nombreArchivo
+            : document.nombreOriginal,
+      );
+
+      final Directory tempDir = await getTemporaryDirectory();
+      final File tempFile = File('${tempDir.path}/$safeName');
+      await tempFile.writeAsBytes(file.bytes, flush: true);
+
+      final OpenResult result = await OpenFilex.open(tempFile.path);
+      if (result.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'No se pudo visualizar el archivo (${result.message}). ¿Deseas descargarlo?',
+            ),
+            action: SnackBarAction(
+              label: 'Descargar',
+              onPressed: () => _descargarDocumento(document),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo visualizar el documento.')),
+      );
+    }
+  }
+
+  Future<void> _descargarDocumento(DocumentoSeguimiento document) async {
+    try {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Descargando documento...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      final DocumentoArchivoBinario file = await ref
+          .read(misTramitesDataSourceProvider)
+          .descargarDocumento(
+            usuarioId: widget.usuarioId,
+            archivoId: document.id,
+          );
+
+      final String safeName = _safeFileName(
+        file.nombreArchivo.trim().isNotEmpty
+            ? file.nombreArchivo
+            : document.nombreOriginal,
+      );
+
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getDownloadsDirectory();
+      }
+      dir ??= await getApplicationDocumentsDirectory();
+
+      final File targetFile = File('${dir.path}/$safeName');
+      await targetFile.writeAsBytes(file.bytes, flush: true);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Documento guardado en descargas ($safeName).'),
+          action: SnackBarAction(
+            label: 'Abrir',
+            onPressed: () async {
+              final OpenResult result = await OpenFilex.open(targetFile.path);
+              if (result.type != ResultType.done && mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('No se pudo abrir el archivo: ${result.message}'),
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo descargar el documento.')),
+      );
+    }
+  }
+
+  Future<void> _editarDocumento(DocumentoSeguimiento document) async {
+    final _DocumentoEditValues? values = await showDialog<_DocumentoEditValues>(
+      context: context,
+      builder: (BuildContext context) {
+        final TextEditingController nombreController = TextEditingController(
+          text: document.nombreOriginal,
+        );
+        final TextEditingController descripcionController =
+            TextEditingController();
+        return AlertDialog(
+          title: const Text('Editar documento'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              TextField(
+                controller: nombreController,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+              ),
+              TextField(
+                controller: descripcionController,
+                decoration: const InputDecoration(labelText: 'Descripcion'),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(
+                _DocumentoEditValues(
+                  nombreController.text,
+                  descripcionController.text,
+                ),
+              ),
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+    if (values == null) {
+      return;
+    }
+    try {
+      await ref.read(misTramitesDataSourceProvider).editarDocumento(
+            usuarioId: widget.usuarioId,
+            archivoId: document.id,
+            nombreOriginal: values.nombre.trim().isEmpty
+                ? document.nombreOriginal
+                : values.nombre.trim(),
+            descripcion: values.descripcion.trim(),
+          );
+      await _cargarSeguimiento();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo editar el documento.')),
+      );
+    }
+  }
+
+  Future<void> _reemplazarDocumento(DocumentoSeguimiento document) async {
+    try {
+      final FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+      final PlatformFile? file = result?.files.isEmpty == true
+          ? null
+          : result?.files.first;
+      final List<int>? bytes = file?.bytes;
+      if (file == null || bytes == null) {
+        return;
+      }
+      await ref.read(misTramitesDataSourceProvider).reemplazarDocumento(
+            usuarioId: widget.usuarioId,
+            archivoId: document.id,
+            nombreArchivo: file.name,
+            bytes: bytes,
+          );
+      await _cargarSeguimiento();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo reemplazar el documento.')),
+      );
+    }
+  }
+
+  Future<void> _eliminarDocumento(DocumentoSeguimiento document) async {
+    try {
+      await ref.read(misTramitesDataSourceProvider).eliminarDocumento(
+            usuarioId: widget.usuarioId,
+            archivoId: document.id,
+          );
+      await _cargarSeguimiento();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo eliminar el documento.')),
+      );
+    }
+  }
+
+  String _safeFileName(String value) {
+    final String normalized = value.trim().isEmpty ? 'documento' : value.trim();
+    return normalized.replaceAll(RegExp(r'[\\/:*?"<>|]+'), '_');
   }
 
   @override
@@ -426,7 +650,14 @@ class _TramiteSeguimientoViewState
             subtitle: 'Lectura movil del flujo, sin edicion ni movimiento.',
           ),
           const SizedBox(height: 10),
-          _Timeline(data: data),
+          _Timeline(
+            data: data,
+            onViewDocument: _verDocumento,
+            onDownloadDocument: _descargarDocumento,
+            onEditDocument: _editarDocumento,
+            onReplaceDocument: _reemplazarDocumento,
+            onDeleteDocument: _eliminarDocumento,
+          ),
         ],
       ),
     );
@@ -1024,9 +1255,21 @@ class _TaskBucket extends StatelessWidget {
 }
 
 class _Timeline extends StatelessWidget {
-  const _Timeline({required this.data});
+  const _Timeline({
+    required this.data,
+    required this.onViewDocument,
+    required this.onDownloadDocument,
+    required this.onEditDocument,
+    required this.onReplaceDocument,
+    required this.onDeleteDocument,
+  });
 
   final _SeguimientoData data;
+  final ValueChanged<DocumentoSeguimiento> onViewDocument;
+  final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
+  final ValueChanged<DocumentoSeguimiento> onEditDocument;
+  final ValueChanged<DocumentoSeguimiento> onReplaceDocument;
+  final ValueChanged<DocumentoSeguimiento> onDeleteDocument;
 
   @override
   Widget build(BuildContext context) {
@@ -1045,10 +1288,16 @@ class _Timeline extends StatelessWidget {
           _TimelineStep(
             node: data.nodes[index],
             tasks: data.tasksForNode(data.nodes[index].id),
+            documentsByTask: data.documentsByTask,
             index: index,
             isFirst: index == 0,
             isLast: index == data.nodes.length - 1,
             isCurrent: data.isCurrentNode(data.nodes[index]),
+            onViewDocument: onViewDocument,
+            onDownloadDocument: onDownloadDocument,
+            onEditDocument: onEditDocument,
+            onReplaceDocument: onReplaceDocument,
+            onDeleteDocument: onDeleteDocument,
           ),
       ],
     );
@@ -1059,18 +1308,30 @@ class _TimelineStep extends StatelessWidget {
   const _TimelineStep({
     required this.node,
     required this.tasks,
+    required this.documentsByTask,
     required this.index,
     required this.isFirst,
     required this.isLast,
     required this.isCurrent,
+    required this.onViewDocument,
+    required this.onDownloadDocument,
+    required this.onEditDocument,
+    required this.onReplaceDocument,
+    required this.onDeleteDocument,
   });
 
   final NodoSeguimiento node;
   final List<TareaSeguimiento> tasks;
+  final Map<String, List<DocumentoSeguimiento>> documentsByTask;
   final int index;
   final bool isFirst;
   final bool isLast;
   final bool isCurrent;
+  final ValueChanged<DocumentoSeguimiento> onViewDocument;
+  final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
+  final ValueChanged<DocumentoSeguimiento> onEditDocument;
+  final ValueChanged<DocumentoSeguimiento> onReplaceDocument;
+  final ValueChanged<DocumentoSeguimiento> onDeleteDocument;
 
   @override
   Widget build(BuildContext context) {
@@ -1097,8 +1358,14 @@ class _TimelineStep extends StatelessWidget {
               child: _TimelineCard(
                 node: node,
                 tasks: tasks,
+                documentsByTask: documentsByTask,
                 index: index,
                 style: style,
+                onViewDocument: onViewDocument,
+                onDownloadDocument: onDownloadDocument,
+                onEditDocument: onEditDocument,
+                onReplaceDocument: onReplaceDocument,
+                onDeleteDocument: onDeleteDocument,
               ),
             ),
           ),
@@ -1112,14 +1379,26 @@ class _TimelineCard extends StatelessWidget {
   const _TimelineCard({
     required this.node,
     required this.tasks,
+    required this.documentsByTask,
     required this.index,
     required this.style,
+    required this.onViewDocument,
+    required this.onDownloadDocument,
+    required this.onEditDocument,
+    required this.onReplaceDocument,
+    required this.onDeleteDocument,
   });
 
   final NodoSeguimiento node;
   final List<TareaSeguimiento> tasks;
+  final Map<String, List<DocumentoSeguimiento>> documentsByTask;
   final int index;
   final _StatusStyle style;
+  final ValueChanged<DocumentoSeguimiento> onViewDocument;
+  final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
+  final ValueChanged<DocumentoSeguimiento> onEditDocument;
+  final ValueChanged<DocumentoSeguimiento> onReplaceDocument;
+  final ValueChanged<DocumentoSeguimiento> onDeleteDocument;
 
   @override
   Widget build(BuildContext context) {
@@ -1237,7 +1516,15 @@ class _TimelineCard extends StatelessWidget {
             ),
             if (tasks.isNotEmpty) ...<Widget>[
               const SizedBox(height: 8),
-              _NodeTaskList(tasks: tasks),
+              _NodeTaskList(
+                tasks: tasks,
+                documentsByTask: documentsByTask,
+                onViewDocument: onViewDocument,
+                onDownloadDocument: onDownloadDocument,
+                onEditDocument: onEditDocument,
+                onReplaceDocument: onReplaceDocument,
+                onDeleteDocument: onDeleteDocument,
+              ),
             ],
           ],
         ),
@@ -1247,9 +1534,23 @@ class _TimelineCard extends StatelessWidget {
 }
 
 class _NodeTaskList extends StatelessWidget {
-  const _NodeTaskList({required this.tasks});
+  const _NodeTaskList({
+    required this.tasks,
+    required this.documentsByTask,
+    required this.onViewDocument,
+    required this.onDownloadDocument,
+    required this.onEditDocument,
+    required this.onReplaceDocument,
+    required this.onDeleteDocument,
+  });
 
   final List<TareaSeguimiento> tasks;
+  final Map<String, List<DocumentoSeguimiento>> documentsByTask;
+  final ValueChanged<DocumentoSeguimiento> onViewDocument;
+  final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
+  final ValueChanged<DocumentoSeguimiento> onEditDocument;
+  final ValueChanged<DocumentoSeguimiento> onReplaceDocument;
+  final ValueChanged<DocumentoSeguimiento> onDeleteDocument;
 
   @override
   Widget build(BuildContext context) {
@@ -1267,6 +1568,8 @@ class _NodeTaskList extends StatelessWidget {
               status,
               assignee,
             ].where((String value) => value.trim().isNotEmpty).join(' - ');
+            final List<DocumentoSeguimiento> documents =
+                documentsByTask[task.id] ?? const <DocumentoSeguimiento>[];
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 7),
@@ -1314,6 +1617,17 @@ class _NodeTaskList extends StatelessWidget {
                                 ),
                               ),
                             ],
+                            if (documents.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: 8),
+                              _TaskDocumentsList(
+                                documents: documents,
+                                onView: onViewDocument,
+                                onDownload: onDownloadDocument,
+                                onEdit: onEditDocument,
+                                onReplace: onReplaceDocument,
+                                onDelete: onDeleteDocument,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1326,6 +1640,144 @@ class _NodeTaskList extends StatelessWidget {
           .toList(growable: false),
     );
   }
+}
+
+class _TaskDocumentsList extends StatelessWidget {
+  const _TaskDocumentsList({
+    required this.documents,
+    required this.onView,
+    required this.onDownload,
+    required this.onEdit,
+    required this.onReplace,
+    required this.onDelete,
+  });
+
+  final List<DocumentoSeguimiento> documents;
+  final ValueChanged<DocumentoSeguimiento> onView;
+  final ValueChanged<DocumentoSeguimiento> onDownload;
+  final ValueChanged<DocumentoSeguimiento> onEdit;
+  final ValueChanged<DocumentoSeguimiento> onReplace;
+  final ValueChanged<DocumentoSeguimiento> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: documents.map((DocumentoSeguimiento document) {
+        final String type = _fallback(
+          document.contentType,
+          _fallback(document.extension, 'Archivo'),
+        );
+        final String uploader = _fallback(
+          document.subidoPorNombre,
+          _fallback(document.subidoPor, 'Usuario no identificado'),
+        );
+        final String date = document.fechaSubida == null
+            ? 'Sin fecha'
+            : _formatShortDate(document.fechaSubida!);
+        return Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: theme.colorScheme.primary.withValues(alpha: 0.18),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    Icons.description_outlined,
+                    size: 17,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      _fallback(document.nombreOriginal, 'Documento'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$type - $date - $uploader - ${_fallback(document.estado, 'Sin estado')}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (document.puedeVer ||
+                  document.puedeDescargar ||
+                  document.puedeEditar ||
+                  document.puedeReemplazar ||
+                  document.puedeEliminar) ...<Widget>[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 5,
+                  runSpacing: 5,
+                  children: <Widget>[
+                    if (document.puedeVer)
+                      ActionChip(
+                        avatar: const Icon(Icons.visibility_rounded, size: 15),
+                        label: const Text('Ver'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => onView(document),
+                      ),
+                    if (document.puedeDescargar)
+                      ActionChip(
+                        avatar: const Icon(Icons.download_rounded, size: 15),
+                        label: const Text('Descargar'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => onDownload(document),
+                      ),
+                    if (document.puedeEditar)
+                      ActionChip(
+                        avatar: const Icon(Icons.edit_rounded, size: 15),
+                        label: const Text('Editar'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => onEdit(document),
+                      ),
+                    if (document.puedeReemplazar)
+                      ActionChip(
+                        avatar: const Icon(Icons.swap_horiz_rounded, size: 15),
+                        label: const Text('Reemplazar'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => onReplace(document),
+                      ),
+                    if (document.puedeEliminar)
+                      ActionChip(
+                        avatar: const Icon(Icons.delete_outline_rounded, size: 15),
+                        label: const Text('Eliminar'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => onDelete(document),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        );
+      }).toList(growable: false),
+    );
+  }
+}
+
+class _DocumentoEditValues {
+  const _DocumentoEditValues(this.nombre, this.descripcion);
+
+  final String nombre;
+  final String descripcion;
 }
 
 class _SimpleNodePreview extends StatelessWidget {
@@ -1864,6 +2316,7 @@ class _SeguimientoData {
     required this.completedTaskLabels,
     required this.pendingTaskLabels,
     required this.tasksByNode,
+    required this.documentsByTask,
   });
 
   factory _SeguimientoData.from({
@@ -1946,6 +2399,7 @@ class _SeguimientoData {
             : nextNodes,
       ),
       tasksByNode: _groupTasksByNode(seguimiento.tareas),
+      documentsByTask: _groupDocumentsByTask(seguimiento.documentos),
     );
   }
 
@@ -1964,6 +2418,7 @@ class _SeguimientoData {
   final List<String> completedTaskLabels;
   final List<String> pendingTaskLabels;
   final Map<String, List<TareaSeguimiento>> tasksByNode;
+  final Map<String, List<DocumentoSeguimiento>> documentsByTask;
 
   List<DepartamentoActualSeguimiento> get departamentosActuales {
     return seguimiento.departamentosActuales;
@@ -2417,6 +2872,23 @@ Map<String, List<TareaSeguimiento>> _groupTasksByNode(
   return grouped;
 }
 
+Map<String, List<DocumentoSeguimiento>> _groupDocumentsByTask(
+  List<DocumentoSeguimiento> documents,
+) {
+  final Map<String, List<DocumentoSeguimiento>> grouped =
+      <String, List<DocumentoSeguimiento>>{};
+
+  for (final DocumentoSeguimiento document in documents) {
+    final String tareaId = document.tareaId.trim();
+    if (tareaId.isEmpty) {
+      continue;
+    }
+    grouped.putIfAbsent(tareaId, () => <DocumentoSeguimiento>[]).add(document);
+  }
+
+  return grouped;
+}
+
 bool _isCompletedStatus(String value) {
   final String normalized = value.trim().toUpperCase();
   return normalized == 'COMPLETADO' ||
@@ -2459,6 +2931,12 @@ bool _isTerminalType(String value) {
 String _fallback(String value, String fallback) {
   final String normalizedValue = value.trim();
   return normalizedValue.isEmpty ? fallback : normalizedValue;
+}
+
+String _formatShortDate(DateTime value) {
+  String twoDigits(int number) => number.toString().padLeft(2, '0');
+  return '${twoDigits(value.day)}/${twoDigits(value.month)}/${value.year} '
+      '${twoDigits(value.hour)}:${twoDigits(value.minute)}';
 }
 
 String _firstNonEmpty(List<String> values) {
