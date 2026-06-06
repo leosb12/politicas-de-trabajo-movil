@@ -61,5 +61,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Esta aplicacion requiere acceso a la lectura de voz para transcribir sus preguntas sobre los tramites.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Esta aplicacion requiere acceso al microfono para capturar su voz para el asistente de IA.</string>
 </dict>
 </plist>

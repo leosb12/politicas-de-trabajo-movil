@@ -46,6 +46,7 @@ dependencies:
   open_filex: ^4.5.0
   path_provider: ^2.1.3
   webview_flutter: ^4.13.1
+  speech_to_text: ^7.4.0
 
 dev_dependencies:
   flutter_test:

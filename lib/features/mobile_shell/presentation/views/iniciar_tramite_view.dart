@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../../../core/network/pago_service.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
@@ -22,15 +23,101 @@ class IniciarTramiteView extends ConsumerStatefulWidget {
 
 class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
   final TextEditingController _necesidadController = TextEditingController();
+  final stt.SpeechToText _speech = stt.SpeechToText();
   String? _requestedUserId;
   String _searchQuery = '';
   TramiteFilter _currentFilter = TramiteFilter.todos;
   bool _usarDeepSeek = false;
+  bool _speechDisponible = false;
+  bool _escuchandoVoz = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _inicializarVoz();
+  }
 
   @override
   void dispose() {
+    _speech.cancel();
     _necesidadController.dispose();
     super.dispose();
+  }
+
+  Future<void> _inicializarVoz() async {
+    try {
+      final bool disponible = await _speech.initialize(
+        onError: (val) {
+          debugPrint('Error de voz: $val');
+          if (mounted) {
+            setState(() {
+              _escuchandoVoz = false;
+            });
+          }
+        },
+        onStatus: (val) {
+          debugPrint('Estado de voz: $val');
+          if (val == 'notListening' || val == 'done') {
+            if (mounted) {
+              setState(() {
+                _escuchandoVoz = false;
+              });
+            }
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _speechDisponible = disponible;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error inicializando voz: $e');
+    }
+  }
+
+  Future<void> _toggleEscucharVoz() async {
+    if (_escuchandoVoz) {
+      await _speech.stop();
+      if (mounted) {
+        setState(() {
+          _escuchandoVoz = false;
+        });
+      }
+    } else {
+      if (!_speechDisponible) {
+        await _inicializarVoz();
+      }
+
+      if (_speechDisponible) {
+        if (mounted) {
+          setState(() {
+            _escuchandoVoz = true;
+          });
+        }
+        await _speech.listen(
+          onResult: (result) {
+            if (mounted) {
+              setState(() {
+                _necesidadController.text = result.recognizedWords;
+                if (result.finalResult) {
+                  _escuchandoVoz = false;
+                }
+              });
+            }
+          },
+          listenOptions: stt.SpeechListenOptions(
+            localeId: 'es_ES',
+          ),
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Permiso de micrófono no concedido o no disponible.')),
+          );
+        }
+      }
+    }
   }
 
   bool _requierePagoValido(TramiteDisponibleItem tramite) {
@@ -363,6 +450,8 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
               children: <Widget>[
                 _NecesidadClasificacionPanel(
                   controller: _necesidadController,
+                  escuchandoVoz: _escuchandoVoz,
+                  onToggleVoz: _toggleEscucharVoz,
                   isClassifying: state.isClassifying,
                   classification: state.classification,
                   classificationError: state.classificationError,
@@ -443,6 +532,8 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
     required this.onIniciar,
     required this.usarDeepSeek,
     required this.onUsarDeepSeekChanged,
+    required this.escuchandoVoz,
+    required this.onToggleVoz,
   });
 
   final TextEditingController controller;
@@ -456,6 +547,8 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
   final ValueChanged<TramiteDisponibleItem> onIniciar;
   final bool usarDeepSeek;
   final ValueChanged<bool> onUsarDeepSeekChanged;
+  final bool escuchandoVoz;
+  final VoidCallback onToggleVoz;
 
   @override
   Widget build(BuildContext context) {
@@ -490,9 +583,17 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
               minLines: 2,
               maxLines: 4,
               textInputAction: TextInputAction.newline,
-              decoration: const InputDecoration(
-                hintText: 'Ej. mi internet esta muy lento desde ayer',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: escuchandoVoz 
+                    ? 'Escuchando voz...' 
+                    : 'Ej. mi internet esta muy lento desde ayer',
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: escuchandoVoz
+                      ? const _IconoMicrofonoAnimado()
+                      : const Icon(Icons.mic_rounded),
+                  onPressed: isClassifying ? null : onToggleVoz,
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -729,6 +830,56 @@ class _ResultadoClasificacionCard extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _IconoMicrofonoAnimado extends StatefulWidget {
+  const _IconoMicrofonoAnimado();
+
+  @override
+  State<_IconoMicrofonoAnimado> createState() => _IconoMicrofonoAnimadoState();
+}
+
+class _IconoMicrofonoAnimadoState extends State<_IconoMicrofonoAnimado>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.0, end: 1.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    return ScaleTransition(
+      scale: _animation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.error.withValues(alpha: 0.18),
+          shape: BoxShape.circle,
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Icon(
+          Icons.mic_rounded,
+          color: colorScheme.error,
+        ),
       ),
     );
   }

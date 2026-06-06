@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../../dominio/modelos/contexto_guia_usuario_movil.dart';
 import '../../dominio/modelos/respuesta_guia_usuario_movil.dart';
@@ -35,6 +36,11 @@ class _PanelGuiaUsuarioMovilState extends ConsumerState<PanelGuiaUsuarioMovil> {
   bool _estaConsultando = false;
   String? _mensajeError;
 
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechDisponible = false;
+  bool _escuchandoVoz = false;
+
+
   @override
   void initState() {
     super.initState();
@@ -51,13 +57,96 @@ class _PanelGuiaUsuarioMovilState extends ConsumerState<PanelGuiaUsuarioMovil> {
         ),
       ),
     );
+    _inicializarVoz();
   }
 
   @override
   void dispose() {
+    _speech.cancel();
     _preguntaController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _inicializarVoz() async {
+    try {
+      final bool disponible = await _speech.initialize(
+        onError: (val) {
+          debugPrint('Error de voz: $val');
+          if (mounted) {
+            setState(() {
+              _escuchandoVoz = false;
+            });
+          }
+        },
+        onStatus: (val) {
+          debugPrint('Estado de voz: $val');
+          if (val == 'notListening' || val == 'done') {
+            if (mounted) {
+              setState(() {
+                _escuchandoVoz = false;
+              });
+            }
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _speechDisponible = disponible;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error inicializando voz: $e');
+    }
+  }
+
+  Future<void> _toggleEscucharVoz() async {
+    if (_estaConsultando) {
+      return;
+    }
+
+    if (_escuchandoVoz) {
+      await _speech.stop();
+      if (mounted) {
+        setState(() {
+          _escuchandoVoz = false;
+        });
+      }
+    } else {
+      if (!_speechDisponible) {
+        await _inicializarVoz();
+      }
+
+      if (_speechDisponible) {
+        if (mounted) {
+          setState(() {
+            _escuchandoVoz = true;
+            _mensajeError = null;
+          });
+        }
+        await _speech.listen(
+          onResult: (result) {
+            if (mounted) {
+              setState(() {
+                _preguntaController.text = result.recognizedWords;
+                if (result.finalResult) {
+                  _escuchandoVoz = false;
+                }
+              });
+            }
+          },
+          listenOptions: stt.SpeechListenOptions(
+            localeId: 'es_ES',
+          ),
+        );
+      } else {
+        if (mounted) {
+          setState(() {
+            _mensajeError = 'Permiso de microfono no concedido o no disponible.';
+          });
+        }
+      }
+    }
   }
 
   Future<void> _enviarPregunta([String? preguntaPredefinida]) async {
@@ -201,6 +290,8 @@ class _PanelGuiaUsuarioMovilState extends ConsumerState<PanelGuiaUsuarioMovil> {
                   child: _CajaEnvio(
                     controller: _preguntaController,
                     estaDeshabilitada: _estaConsultando,
+                    escuchandoVoz: _escuchandoVoz,
+                    onToggleVoz: _toggleEscucharVoz,
                     onEnviar: _enviarPregunta,
                   ),
                 ),
@@ -773,20 +864,25 @@ class _CajaEnvio extends StatelessWidget {
   const _CajaEnvio({
     required this.controller,
     required this.estaDeshabilitada,
+    required this.escuchandoVoz,
+    required this.onToggleVoz,
     required this.onEnviar,
   });
 
   final TextEditingController controller;
   final bool estaDeshabilitada;
+  final bool escuchandoVoz;
+  final VoidCallback onToggleVoz;
   final ValueChanged<String?> onEnviar;
 
   @override
   Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        color: theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
@@ -800,17 +896,76 @@ class _CajaEnvio extends StatelessWidget {
                 enabled: !estaDeshabilitada,
                 textInputAction: TextInputAction.send,
                 onSubmitted: estaDeshabilitada ? null : onEnviar,
-                decoration: const InputDecoration(
-                  hintText: 'Pregunta por tu tramite o por esta pantalla',
+                decoration: InputDecoration(
+                  hintText: escuchandoVoz
+                      ? 'Escuchando voz...'
+                      : 'Pregunta por tu tramite o por esta pantalla',
                   border: InputBorder.none,
                 ),
               ),
             ),
+            IconButton(
+              onPressed: estaDeshabilitada ? null : onToggleVoz,
+              icon: escuchandoVoz
+                  ? const _IconoMicrofonoAnimado()
+                  : const Icon(Icons.mic_rounded),
+            ),
+            const SizedBox(width: 4),
             IconButton.filled(
-              onPressed: estaDeshabilitada ? null : () => onEnviar(null),
+              onPressed: estaDeshabilitada || escuchandoVoz ? null : () => onEnviar(null),
               icon: const Icon(Icons.send_rounded),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IconoMicrofonoAnimado extends StatefulWidget {
+  const _IconoMicrofonoAnimado();
+
+  @override
+  State<_IconoMicrofonoAnimado> createState() => _IconoMicrofonoAnimadoState();
+}
+
+class _IconoMicrofonoAnimadoState extends State<_IconoMicrofonoAnimado>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+    _animation = Tween<double>(begin: 1.0, end: 1.4).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    return ScaleTransition(
+      scale: _animation,
+      child: Container(
+        decoration: BoxDecoration(
+          color: colorScheme.error.withValues(alpha: 0.18),
+          shape: BoxShape.circle,
+        ),
+        padding: const EdgeInsets.all(4),
+        child: Icon(
+          Icons.mic_rounded,
+          color: colorScheme.error,
         ),
       ),
     );
