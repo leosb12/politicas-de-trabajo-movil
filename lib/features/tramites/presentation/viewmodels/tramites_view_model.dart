@@ -48,6 +48,7 @@ class TramitesViewModel extends StateNotifier<TramitesState> {
   Future<void> iniciarTramite({
     required String actorUserId,
     required TramiteDisponible tramite,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     state = state.copyWith(
       startingTramiteId: tramite.id,
@@ -60,6 +61,7 @@ class TramitesViewModel extends StateNotifier<TramitesState> {
       final instancia = await _iniciarTramiteUseCase(
         actorUserId: actorUserId,
         politicaId: tramite.id,
+        respuestasRequisitosIniciales: respuestasRequisitosIniciales,
       );
 
       final String codigoVisible = instancia.codigoTramite.isNotEmpty

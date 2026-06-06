@@ -1,13 +1,18 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/network/api_failure.dart';
+import '../../../../core/network/network_constants.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../../guia_usuario_movil/dominio/modelos/contexto_guia_usuario_movil.dart';
 import '../../../guia_usuario_movil/presentacion/widgets/boton_guia_usuario_movil.dart';
 import '../../domain/models/tarea_formulario_detalle.dart';
+import '../../domain/models/tramite_seguimiento.dart';
+import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/tarea_formulario_providers.dart';
+import 'onlyoffice_mobile_view.dart';
 
 class TareaFormularioPendienteView extends ConsumerStatefulWidget {
   const TareaFormularioPendienteView({
@@ -48,6 +53,9 @@ class _TareaFormularioPendienteViewState
   bool _isSubmitting = false;
   String? _errorMessage;
 
+  /// Collaborative documents attached to this task (DOCUMENTO_COLABORATIVO fields).
+  List<DocumentoSeguimiento> _docColaborativos = <DocumentoSeguimiento>[];
+
   @override
   void initState() {
     super.initState();
@@ -75,6 +83,9 @@ class _TareaFormularioPendienteViewState
           .obtenerDetalle(usuarioId: widget.usuarioId, tareaId: widget.tareaId);
 
       _hydrateForm(detalle);
+
+      // Load collaborative docs in parallel (non-blocking on error)
+      _cargarDocColaborativos();
 
       if (!mounted) {
         return;
@@ -105,6 +116,102 @@ class _TareaFormularioPendienteViewState
         _errorMessage = 'No se pudo cargar la tarea desde el servidor.';
       });
     }
+  }
+
+  /// Loads collaborative documents associated with this task from the backend.
+  /// Errors are silently swallowed — the UI just shows no docs in that case.
+  Future<void> _cargarDocColaborativos() async {
+    try {
+      final Dio dio = ref.read(misTramitesDioProvider);
+      final Response<dynamic> response = await dio.get(
+        NetworkConstants.documentosColaborativosPorTareaPath(widget.tareaId),
+        options: Options(
+          headers: <String, String>{'X-User-Id': widget.usuarioId},
+        ),
+      );
+      final dynamic raw = response.data;
+      if (raw is! List<dynamic>) return;
+      final List<DocumentoSeguimiento> docs = raw
+          .whereType<Map<dynamic, dynamic>>()
+          .map(_parseDocColab)
+          .whereType<DocumentoSeguimiento>()
+          .where((DocumentoSeguimiento d) => d.puedeVer)
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() => _docColaborativos = docs);
+    } catch (_) {
+      // Silently ignore — collaborative docs are optional
+    }
+  }
+
+  DocumentoSeguimiento? _parseDocColab(Map<dynamic, dynamic> raw) {
+    try {
+      final Map<String, dynamic> json = raw.map(
+        (dynamic k, dynamic v) => MapEntry<String, dynamic>(k.toString(), v),
+      );
+      final String documentoId = _s(json['documentoId']);
+      if (documentoId.isEmpty) return null;
+      final Map<String, dynamic>? permisos =
+          json['permisosUsuario'] is Map<dynamic, dynamic>
+              ? (json['permisosUsuario'] as Map<dynamic, dynamic>).map(
+                  (dynamic k, dynamic v) =>
+                      MapEntry<String, dynamic>(k.toString(), v),
+                )
+              : json['permisosUsuario'] as Map<String, dynamic>?;
+      final bool puedeLeer = _b(permisos?['puedeLeer']);
+      final bool puedeEditar = _b(permisos?['puedeEditar']);
+      if (!puedeLeer) return null;
+      return DocumentoSeguimiento(
+        id: documentoId,
+        nombreOriginal: _s(json['nombreDocumento']),
+        contentType: 'application/octet-stream',
+        extension: _s(json['tipoDocumento']).toLowerCase(),
+        fechaSubida: null,
+        subidoPor: '',
+        subidoPorNombre: '',
+        estado: _s(json['estado']),
+        tareaId: widget.tareaId,
+        actividadId: '',
+        campoId: _s(json['campoFormularioId']),
+        urlAcceso: '',
+        puedeVer: puedeLeer,
+        puedeDescargar: _b(permisos?['puedeDescargar']),
+        puedeEditar: puedeEditar,
+        puedeReemplazar: false,
+        puedeEliminar: false,
+        documentoColaborativoId: documentoId,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _s(dynamic v) => v?.toString().trim() ?? '';
+  static bool _b(dynamic v) {
+    if (v is bool) return v;
+    if (v is String) return v.trim().toLowerCase() == 'true';
+    return false;
+  }
+
+  Future<void> _abrirDocColaborativo(DocumentoSeguimiento doc) async {
+    final String docId = doc.documentoColaborativoId ?? '';
+    if (docId.isEmpty) return;
+    final String path =
+        NetworkConstants.documentoColaborativoMobileViewerPath(docId);
+    final Uri? baseUri = Uri.tryParse(NetworkConstants.baseUrl);
+    if (baseUri == null || !baseUri.hasScheme) return;
+    final Uri viewerUrl = baseUri.resolve(path);
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => OnlyOfficeMobileView(
+          url: viewerUrl,
+          titulo: doc.nombreOriginal.isEmpty ? 'Documento colaborativo' : doc.nombreOriginal,
+          usuarioId: widget.usuarioId,
+          puedeEditar: doc.puedeEditar,
+        ),
+      ),
+    );
   }
 
   void _hydrateForm(TareaFormularioDetalle detalle) {
@@ -546,6 +653,15 @@ class _TareaFormularioPendienteViewState
                   'Esta tarea ya no esta abierta. Vuelve a seguimiento para ver el estado actualizado.',
             ),
           ],
+          // ─── Collaborative documents section ───────────────────────────────
+          if (_docColaborativos.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _ColaborativaDocsSection(
+              docs: _docColaborativos,
+              onAbrirDoc: _abrirDocColaborativo,
+            ),
+          ],
+          // ──────────────────────────────────────────────────────────────────
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: tareaCerrada || _isSubmitting ? null : _completarTarea,
@@ -952,6 +1068,154 @@ class _TareaFormularioPendienteViewState
           ],
         );
 
+      case 'DOCUMENTO_COLABORATIVO':
+        // Find the matching collaborative document for this field.
+        // Match by campoId (campo.clave is the campoFormularioId).
+        final List<DocumentoSeguimiento> docsParaEsteCampo = _docColaborativos
+            .where((DocumentoSeguimiento d) =>
+                d.campoId == campo.clave || d.campoId.isEmpty)
+            .toList(growable: false);
+
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.35),
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.edit_document,
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'OnlyOffice',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              if (campo.ayuda != null && campo.ayuda!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  campo.ayuda!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              if (docsParaEsteCampo.isEmpty)
+                Row(
+                  children: <Widget>[
+                    const Icon(Icons.hourglass_empty_rounded,
+                        size: 16, color: Colors.orange),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Documento pendiente de inicialización.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.orange.shade700,
+                          ),
+                    ),
+                  ],
+                )
+              else
+                ...docsParaEsteCampo.map((DocumentoSeguimiento doc) {
+                  final bool puedeEditar = doc.puedeEditar;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: puedeEditar
+                              ? Colors.green.withValues(alpha: 0.3)
+                              : Colors.orange.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(
+                          puedeEditar
+                              ? Icons.edit_rounded
+                              : Icons.visibility_rounded,
+                          color: puedeEditar
+                              ? Colors.green.shade700
+                              : Colors.orange.shade700,
+                          size: 22,
+                        ),
+                        title: Text(
+                          doc.nombreOriginal.isEmpty
+                              ? 'Documento colaborativo'
+                              : doc.nombreOriginal,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        subtitle: Text(
+                          puedeEditar ? 'Puedes editar' : 'Solo lectura',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: puedeEditar
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade700,
+                              ),
+                        ),
+                        trailing: FilledButton.tonalIcon(
+                          onPressed: () => _abrirDocColaborativo(doc),
+                          icon: Icon(
+                            puedeEditar
+                                ? Icons.edit_document
+                                : Icons.open_in_new_rounded,
+                            size: 16,
+                          ),
+                          label: Text(puedeEditar ? 'Editar' : 'Ver'),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: puedeEditar
+                                ? Colors.green.withValues(alpha: 0.15)
+                                : Colors.orange.withValues(alpha: 0.15),
+                            foregroundColor: puedeEditar
+                                ? Colors.green.shade800
+                                : Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+        );
+
       case 'NUMERO':
         return TextFormField(
           controller: _textControllers[campo.clave],
@@ -1289,3 +1553,158 @@ class _InlineInfo extends StatelessWidget {
     );
   }
 }
+
+/// Section shown before the submit button listing all collaborative OnlyOffice
+/// documents that the user can access for this task.
+class _ColaborativaDocsSection extends StatelessWidget {
+  const _ColaborativaDocsSection({
+    required this.docs,
+    required this.onAbrirDoc,
+  });
+
+  final List<DocumentoSeguimiento> docs;
+  final void Function(DocumentoSeguimiento doc) onAbrirDoc;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme colors = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: colors.primary.withValues(alpha: 0.28),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.source_rounded, color: colors.primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Documentos colaborativos',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: colors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'OnlyOffice',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Documentos accesibles en esta tarea según tus permisos.',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...docs.map((DocumentoSeguimiento doc) {
+            final bool puedeEditar = doc.puedeEditar;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => onAbrirDoc(doc),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: puedeEditar
+                            ? Colors.green.withValues(alpha: 0.35)
+                            : Colors.orange.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: puedeEditar
+                                ? Colors.green.withValues(alpha: 0.12)
+                                : Colors.orange.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            puedeEditar
+                                ? Icons.edit_rounded
+                                : Icons.visibility_rounded,
+                            color: puedeEditar
+                                ? Colors.green.shade700
+                                : Colors.orange.shade700,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                doc.nombreOriginal.isEmpty
+                                    ? 'Documento colaborativo'
+                                    : doc.nombreOriginal,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                puedeEditar
+                                    ? '✏️ Puedes editar y guardar'
+                                    : '👁 Solo lectura',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: puedeEditar
+                                      ? Colors.green.shade700
+                                      : Colors.orange.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.open_in_new_rounded,
+                          color: colors.primary,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+

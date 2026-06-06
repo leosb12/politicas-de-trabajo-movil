@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../../../../core/network/api_failure.dart';
 import '../../../../core/network/network_constants.dart';
+import '../../../mobile_shell/data/models/tarea_formulario_detalle_model.dart';
 import '../models/crear_instancia_request_model.dart';
 import '../models/instancia_iniciada_model.dart';
 import '../models/tramite_disponible_model.dart';
@@ -19,6 +20,12 @@ abstract class TramitesRemoteDataSource {
   });
 
   Future<InstanciaIniciadaModel> iniciarTramite({
+    required String actorUserId,
+    required String politicaId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
+  });
+
+  Future<List<CampoFormularioDetalleModel>> obtenerRequisitosIniciales({
     required String actorUserId,
     required String politicaId,
   });
@@ -73,9 +80,11 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
   Future<InstanciaIniciadaModel> iniciarTramite({
     required String actorUserId,
     required String politicaId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     final CrearInstanciaRequestModel request = CrearInstanciaRequestModel(
       politicaId: politicaId,
+      respuestasRequisitosIniciales: respuestasRequisitosIniciales,
     );
 
     try {
@@ -134,5 +143,40 @@ class TramitesRemoteDataSourceImpl implements TramitesRemoteDataSource {
     }
 
     return InstanciaIniciadaModel.fromJson(data);
+  }
+
+  @override
+  Future<List<CampoFormularioDetalleModel>> obtenerRequisitosIniciales({
+    required String actorUserId,
+    required String politicaId,
+  }) async {
+    try {
+      final Response<dynamic> response = await _dio.get(
+        NetworkConstants.requisitosInicialesPath(politicaId),
+        options: Options(headers: <String, String>{'X-User-Id': actorUserId}),
+      );
+
+      return _parseRequisitosInicialesResponse(response.data);
+    } on DioException catch (exception) {
+      throw ApiFailure.fromDioException(exception);
+    } on ApiFailure {
+      rethrow;
+    }
+  }
+
+  List<CampoFormularioDetalleModel> _parseRequisitosInicialesResponse(dynamic data) {
+    if (data is! List<dynamic>) {
+      throw ApiFailure(message: 'Respuesta invalida del servidor.');
+    }
+
+    return data
+        .map((item) {
+          if (item is! Map<String, dynamic>) {
+            throw ApiFailure(message: 'Respuesta invalida del servidor.');
+          }
+
+          return CampoFormularioDetalleModel.fromJson(item);
+        })
+        .toList(growable: false);
   }
 }

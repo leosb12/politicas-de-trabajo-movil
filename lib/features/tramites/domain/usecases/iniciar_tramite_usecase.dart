@@ -9,10 +9,12 @@ class IniciarTramiteUseCase {
   Future<InstanciaIniciada> call({
     required String actorUserId,
     required String politicaId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) {
     return _repository.iniciarTramite(
       actorUserId: actorUserId,
       politicaId: politicaId,
+      respuestasRequisitosIniciales: respuestasRequisitosIniciales,
     );
   }
 }

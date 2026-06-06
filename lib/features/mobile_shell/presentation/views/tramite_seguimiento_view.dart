@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../../core/network/network_constants.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../../guia_usuario_movil/dominio/modelos/contexto_guia_usuario_movil.dart';
 import '../../../guia_usuario_movil/presentacion/widgets/boton_guia_usuario_movil.dart';
@@ -16,6 +17,7 @@ import '../../data/datasources/mis_tramites_mock_datasource.dart';
 import '../viewmodels/mis_tramites_providers.dart';
 import '../viewmodels/tramite_seguimiento_state.dart';
 import '../viewmodels/tramite_seguimiento_view_model.dart';
+import 'onlyoffice_mobile_view.dart';
 import 'widgets/tarea_formulario_pendiente_card.dart';
 
 class TramiteSeguimientoView extends ConsumerStatefulWidget {
@@ -65,10 +67,7 @@ class _TramiteSeguimientoViewState
 
       final DocumentoArchivoBinario file = await ref
           .read(misTramitesDataSourceProvider)
-          .verDocumento(
-            usuarioId: widget.usuarioId,
-            archivoId: document.id,
-          );
+          .verDocumento(usuarioId: widget.usuarioId, archivoId: document.id);
 
       final String safeName = _safeFileName(
         file.nombreArchivo.trim().isNotEmpty
@@ -101,6 +100,77 @@ class _TramiteSeguimientoViewState
       );
     }
   }
+
+  Future<void> _abrirOnlyOffice(DocumentoSeguimiento document) async {
+    final Uri? url = _resolveOnlyOfficeUrl(document);
+    if (url == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este documento no tiene visualización en vivo disponible.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) {
+          return OnlyOfficeMobileView(
+            url: url,
+            titulo: _fallback(document.nombreOriginal, 'OnlyOffice'),
+            usuarioId: widget.usuarioId,
+            puedeEditar: document.puedeEditar,
+          );
+        },
+      ),
+    );
+  }
+
+  /// Resolves the URL for the OnlyOffice mobile viewer.
+  /// Priority:
+  ///   1. If the document has a documentoColaborativoId, use the backend
+  ///      /mobile-viewer endpoint (server-side permission enforcement).
+  ///   2. Otherwise fall back to the raw urlAcceso for legacy S3-backed files.
+  Uri? _resolveOnlyOfficeUrl(DocumentoSeguimiento document) {
+    if (document.esDocumentoColaborativo) {
+      final String path = NetworkConstants.documentoColaborativoMobileViewerPath(
+        document.documentoColaborativoId!,
+      );
+      final Uri? baseUri = Uri.tryParse(NetworkConstants.baseUrl);
+      if (baseUri != null && baseUri.hasScheme) {
+        return baseUri.resolve(path);
+      }
+    }
+    // Fallback to direct urlAcceso
+    return _resolveDocumentUrl(document.urlAcceso);
+  }
+
+  Uri? _resolveDocumentUrl(String rawUrl) {
+    final String value = rawUrl.trim();
+    if (value.isEmpty) {
+      return null;
+    }
+
+    final Uri? parsed = Uri.tryParse(value);
+    if (parsed == null) {
+      return null;
+    }
+
+    if (parsed.hasScheme) {
+      return parsed;
+    }
+
+    final Uri? baseUri = Uri.tryParse(NetworkConstants.baseUrl);
+    if (baseUri == null || !baseUri.hasScheme) {
+      return null;
+    }
+
+    return baseUri.resolveUri(parsed);
+  }
+
 
   Future<void> _descargarDocumento(DocumentoSeguimiento document) async {
     try {
@@ -145,7 +215,9 @@ class _TramiteSeguimientoViewState
               if (result.type != ResultType.done && mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('No se pudo abrir el archivo: ${result.message}'),
+                    content: Text(
+                      'No se pudo abrir el archivo: ${result.message}',
+                    ),
                   ),
                 );
               }
@@ -207,7 +279,9 @@ class _TramiteSeguimientoViewState
       return;
     }
     try {
-      await ref.read(misTramitesDataSourceProvider).editarDocumento(
+      await ref
+          .read(misTramitesDataSourceProvider)
+          .editarDocumento(
             usuarioId: widget.usuarioId,
             archivoId: document.id,
             nombreOriginal: values.nombre.trim().isEmpty
@@ -237,7 +311,9 @@ class _TramiteSeguimientoViewState
       if (file == null || bytes == null) {
         return;
       }
-      await ref.read(misTramitesDataSourceProvider).reemplazarDocumento(
+      await ref
+          .read(misTramitesDataSourceProvider)
+          .reemplazarDocumento(
             usuarioId: widget.usuarioId,
             archivoId: document.id,
             nombreArchivo: file.name,
@@ -254,7 +330,9 @@ class _TramiteSeguimientoViewState
 
   Future<void> _eliminarDocumento(DocumentoSeguimiento document) async {
     try {
-      await ref.read(misTramitesDataSourceProvider).eliminarDocumento(
+      await ref
+          .read(misTramitesDataSourceProvider)
+          .eliminarDocumento(
             usuarioId: widget.usuarioId,
             archivoId: document.id,
           );
@@ -650,8 +728,17 @@ class _TramiteSeguimientoViewState
             subtitle: 'Lectura movil del flujo, sin edicion ni movimiento.',
           ),
           const SizedBox(height: 10),
+          if (data.visibleDocuments.isNotEmpty) ...<Widget>[
+            _VisibleRouteDocumentsPanel(
+              documents: data.visibleDocuments,
+              onOpenOnlyOffice: _abrirOnlyOffice,
+              onViewDocument: _verDocumento,
+            ),
+            const SizedBox(height: 12),
+          ],
           _Timeline(
             data: data,
+            onOpenOnlyOffice: _abrirOnlyOffice,
             onViewDocument: _verDocumento,
             onDownloadDocument: _descargarDocumento,
             onEditDocument: _editarDocumento,
@@ -1257,6 +1344,7 @@ class _TaskBucket extends StatelessWidget {
 class _Timeline extends StatelessWidget {
   const _Timeline({
     required this.data,
+    required this.onOpenOnlyOffice,
     required this.onViewDocument,
     required this.onDownloadDocument,
     required this.onEditDocument,
@@ -1265,6 +1353,7 @@ class _Timeline extends StatelessWidget {
   });
 
   final _SeguimientoData data;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
   final ValueChanged<DocumentoSeguimiento> onViewDocument;
   final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
   final ValueChanged<DocumentoSeguimiento> onEditDocument;
@@ -1293,6 +1382,7 @@ class _Timeline extends StatelessWidget {
             isFirst: index == 0,
             isLast: index == data.nodes.length - 1,
             isCurrent: data.isCurrentNode(data.nodes[index]),
+            onOpenOnlyOffice: onOpenOnlyOffice,
             onViewDocument: onViewDocument,
             onDownloadDocument: onDownloadDocument,
             onEditDocument: onEditDocument,
@@ -1313,6 +1403,7 @@ class _TimelineStep extends StatelessWidget {
     required this.isFirst,
     required this.isLast,
     required this.isCurrent,
+    required this.onOpenOnlyOffice,
     required this.onViewDocument,
     required this.onDownloadDocument,
     required this.onEditDocument,
@@ -1327,6 +1418,7 @@ class _TimelineStep extends StatelessWidget {
   final bool isFirst;
   final bool isLast;
   final bool isCurrent;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
   final ValueChanged<DocumentoSeguimiento> onViewDocument;
   final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
   final ValueChanged<DocumentoSeguimiento> onEditDocument;
@@ -1361,6 +1453,7 @@ class _TimelineStep extends StatelessWidget {
                 documentsByTask: documentsByTask,
                 index: index,
                 style: style,
+                onOpenOnlyOffice: onOpenOnlyOffice,
                 onViewDocument: onViewDocument,
                 onDownloadDocument: onDownloadDocument,
                 onEditDocument: onEditDocument,
@@ -1382,6 +1475,7 @@ class _TimelineCard extends StatelessWidget {
     required this.documentsByTask,
     required this.index,
     required this.style,
+    required this.onOpenOnlyOffice,
     required this.onViewDocument,
     required this.onDownloadDocument,
     required this.onEditDocument,
@@ -1394,6 +1488,7 @@ class _TimelineCard extends StatelessWidget {
   final Map<String, List<DocumentoSeguimiento>> documentsByTask;
   final int index;
   final _StatusStyle style;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
   final ValueChanged<DocumentoSeguimiento> onViewDocument;
   final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
   final ValueChanged<DocumentoSeguimiento> onEditDocument;
@@ -1519,6 +1614,7 @@ class _TimelineCard extends StatelessWidget {
               _NodeTaskList(
                 tasks: tasks,
                 documentsByTask: documentsByTask,
+                onOpenOnlyOffice: onOpenOnlyOffice,
                 onViewDocument: onViewDocument,
                 onDownloadDocument: onDownloadDocument,
                 onEditDocument: onEditDocument,
@@ -1537,6 +1633,7 @@ class _NodeTaskList extends StatelessWidget {
   const _NodeTaskList({
     required this.tasks,
     required this.documentsByTask,
+    required this.onOpenOnlyOffice,
     required this.onViewDocument,
     required this.onDownloadDocument,
     required this.onEditDocument,
@@ -1546,6 +1643,7 @@ class _NodeTaskList extends StatelessWidget {
 
   final List<TareaSeguimiento> tasks;
   final Map<String, List<DocumentoSeguimiento>> documentsByTask;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
   final ValueChanged<DocumentoSeguimiento> onViewDocument;
   final ValueChanged<DocumentoSeguimiento> onDownloadDocument;
   final ValueChanged<DocumentoSeguimiento> onEditDocument;
@@ -1621,6 +1719,7 @@ class _NodeTaskList extends StatelessWidget {
                               const SizedBox(height: 8),
                               _TaskDocumentsList(
                                 documents: documents,
+                                onOpenOnlyOffice: onOpenOnlyOffice,
                                 onView: onViewDocument,
                                 onDownload: onDownloadDocument,
                                 onEdit: onEditDocument,
@@ -1645,6 +1744,7 @@ class _NodeTaskList extends StatelessWidget {
 class _TaskDocumentsList extends StatelessWidget {
   const _TaskDocumentsList({
     required this.documents,
+    required this.onOpenOnlyOffice,
     required this.onView,
     required this.onDownload,
     required this.onEdit,
@@ -1653,6 +1753,7 @@ class _TaskDocumentsList extends StatelessWidget {
   });
 
   final List<DocumentoSeguimiento> documents;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
   final ValueChanged<DocumentoSeguimiento> onView;
   final ValueChanged<DocumentoSeguimiento> onDownload;
   final ValueChanged<DocumentoSeguimiento> onEdit;
@@ -1664,111 +1765,285 @@ class _TaskDocumentsList extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: documents.map((DocumentoSeguimiento document) {
-        final String type = _fallback(
-          document.contentType,
-          _fallback(document.extension, 'Archivo'),
-        );
-        final String uploader = _fallback(
-          document.subidoPorNombre,
-          _fallback(document.subidoPor, 'Usuario no identificado'),
-        );
-        final String date = document.fechaSubida == null
-            ? 'Sin fecha'
-            : _formatShortDate(document.fechaSubida!);
-        return Container(
-          margin: const EdgeInsets.only(top: 6),
-          padding: const EdgeInsets.all(9),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.18),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Row(
+      children: documents
+          .map((DocumentoSeguimiento document) {
+            final String type = _fallback(
+              document.contentType,
+              _fallback(document.extension, 'Archivo'),
+            );
+            final String uploader = _fallback(
+              document.subidoPorNombre,
+              _fallback(document.subidoPor, 'Usuario no identificado'),
+            );
+            final String date = document.fechaSubida == null
+                ? 'Sin fecha'
+                : _formatShortDate(document.fechaSubida!);
+            return Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                ),
+              ),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Icon(
-                    Icons.description_outlined,
-                    size: 17,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      _fallback(document.nombreOriginal, 'Documento'),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Icon(
+                        Icons.description_outlined,
+                        size: 17,
+                        color: theme.colorScheme.primary,
                       ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          _fallback(document.nombreOriginal, 'Documento'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$type - $date - $uploader - ${_fallback(document.estado, 'Sin estado')}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                  if (document.puedeVer ||
+                      document.urlAcceso.trim().isNotEmpty ||
+                      document.esDocumentoColaborativo ||
+                      document.puedeDescargar ||
+                      document.puedeEditar ||
+                      document.puedeReemplazar ||
+                      document.puedeEliminar) ...<Widget>[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      children: <Widget>[
+                        if (document.urlAcceso.trim().isNotEmpty || document.esDocumentoColaborativo)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.visibility_rounded,
+                              size: 15,
+                            ),
+                            label: const Text('Visualizar en vivo'),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onOpenOnlyOffice(document),
+                          ),
+                        if (document.puedeVer)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.visibility_rounded,
+                              size: 15,
+                            ),
+                            label: const Text('Ver'),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onView(document),
+                          ),
+                        if (document.puedeDescargar)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.download_rounded,
+                              size: 15,
+                            ),
+                            label: const Text('Descargar'),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onDownload(document),
+                          ),
+                        if (document.puedeEditar)
+                          ActionChip(
+                            avatar: const Icon(Icons.edit_rounded, size: 15),
+                            label: const Text('Editar'),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onEdit(document),
+                          ),
+                        if (document.puedeReemplazar)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.swap_horiz_rounded,
+                              size: 15,
+                            ),
+                            label: const Text('Reemplazar'),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onReplace(document),
+                          ),
+                        if (document.puedeEliminar)
+                          ActionChip(
+                            avatar: const Icon(
+                              Icons.delete_outline_rounded,
+                              size: 15,
+                            ),
+                            label: const Text('Eliminar'),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => onDelete(document),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                '$type - $date - $uploader - ${_fallback(document.estado, 'Sin estado')}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+            );
+          })
+          .toList(growable: false),
+    );
+  }
+}
+
+class _VisibleRouteDocumentsPanel extends StatelessWidget {
+  const _VisibleRouteDocumentsPanel({
+    required this.documents,
+    required this.onOpenOnlyOffice,
+    required this.onViewDocument,
+  });
+
+  final List<DocumentoSeguimiento> documents;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
+  final ValueChanged<DocumentoSeguimiento> onViewDocument;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return _SectionSurface(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                Icons.folder_shared_outlined,
+                color: theme.colorScheme.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Documentos visibles',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-              if (document.puedeVer ||
-                  document.puedeDescargar ||
-                  document.puedeEditar ||
-                  document.puedeReemplazar ||
-                  document.puedeEliminar) ...<Widget>[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 5,
-                  runSpacing: 5,
-                  children: <Widget>[
-                    if (document.puedeVer)
-                      ActionChip(
-                        avatar: const Icon(Icons.visibility_rounded, size: 15),
-                        label: const Text('Ver'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onView(document),
-                      ),
-                    if (document.puedeDescargar)
-                      ActionChip(
-                        avatar: const Icon(Icons.download_rounded, size: 15),
-                        label: const Text('Descargar'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onDownload(document),
-                      ),
-                    if (document.puedeEditar)
-                      ActionChip(
-                        avatar: const Icon(Icons.edit_rounded, size: 15),
-                        label: const Text('Editar'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onEdit(document),
-                      ),
-                    if (document.puedeReemplazar)
-                      ActionChip(
-                        avatar: const Icon(Icons.swap_horiz_rounded, size: 15),
-                        label: const Text('Reemplazar'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onReplace(document),
-                      ),
-                    if (document.puedeEliminar)
-                      ActionChip(
-                        avatar: const Icon(Icons.delete_outline_rounded, size: 15),
-                        label: const Text('Eliminar'),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onDelete(document),
-                      ),
-                  ],
-                ),
-              ],
             ],
           ),
-        );
-      }).toList(growable: false),
+          const SizedBox(height: 4),
+          Text(
+            'Disponibles para el cliente iniciador en modo lectura.',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          ...documents.map((DocumentoSeguimiento document) {
+            return _RouteDocumentTile(
+              document: document,
+              onOpenOnlyOffice: onOpenOnlyOffice,
+              onViewDocument: onViewDocument,
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteDocumentTile extends StatelessWidget {
+  const _RouteDocumentTile({
+    required this.document,
+    required this.onOpenOnlyOffice,
+    required this.onViewDocument,
+  });
+
+  final DocumentoSeguimiento document;
+  final ValueChanged<DocumentoSeguimiento> onOpenOnlyOffice;
+  final ValueChanged<DocumentoSeguimiento> onViewDocument;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final String type = _fallback(
+      document.contentType,
+      _fallback(document.extension, 'Archivo'),
+    );
+    final String date = document.fechaSubida == null
+        ? 'Sin fecha'
+        : _formatShortDate(document.fechaSubida!);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                Icons.description_outlined,
+                color: theme.colorScheme.primary,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _fallback(document.nombreOriginal, 'Documento'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '$type - $date - ${_fallback(document.estado, 'Sin estado')}',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: <Widget>[
+              if (document.urlAcceso.trim().isNotEmpty || document.esDocumentoColaborativo)
+                ActionChip(
+                  avatar: const Icon(Icons.visibility_rounded, size: 15),
+                  label: const Text('Visualizar en vivo'),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => onOpenOnlyOffice(document),
+                ),
+              if (document.puedeVer)
+                ActionChip(
+                  avatar: const Icon(Icons.open_in_new_rounded, size: 15),
+                  label: const Text('Abrir'),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => onViewDocument(document),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2317,6 +2592,7 @@ class _SeguimientoData {
     required this.pendingTaskLabels,
     required this.tasksByNode,
     required this.documentsByTask,
+    required this.visibleDocuments,
   });
 
   factory _SeguimientoData.from({
@@ -2352,6 +2628,12 @@ class _SeguimientoData {
       orderedNodes: nodes,
       currentNodes: currentNodes,
     );
+
+    final Map<String, List<TareaSeguimiento>> tasksByNode = _groupTasksByNode(
+      seguimiento.tareas,
+    );
+    final Map<String, List<DocumentoSeguimiento>> documentsByTask =
+        _groupDocumentsByTask(seguimiento.documentos);
 
     return _SeguimientoData(
       seguimiento: seguimiento,
@@ -2398,8 +2680,11 @@ class _SeguimientoData {
                   .toList(growable: false)
             : nextNodes,
       ),
-      tasksByNode: _groupTasksByNode(seguimiento.tareas),
-      documentsByTask: _groupDocumentsByTask(seguimiento.documentos),
+      tasksByNode: tasksByNode,
+      documentsByTask: documentsByTask,
+      visibleDocuments: seguimiento.documentos
+          .where((DocumentoSeguimiento document) => document.puedeVer)
+          .toList(growable: false),
     );
   }
 
@@ -2419,6 +2704,7 @@ class _SeguimientoData {
   final List<String> pendingTaskLabels;
   final Map<String, List<TareaSeguimiento>> tasksByNode;
   final Map<String, List<DocumentoSeguimiento>> documentsByTask;
+  final List<DocumentoSeguimiento> visibleDocuments;
 
   List<DepartamentoActualSeguimiento> get departamentosActuales {
     return seguimiento.departamentosActuales;

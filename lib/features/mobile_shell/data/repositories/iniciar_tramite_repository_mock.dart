@@ -15,13 +15,28 @@ class IniciarTramiteRepositoryMock implements IniciarTramiteRepository {
   }
 
   @override
+  Future<ClasificacionSolicitudResult> clasificarSolicitud({
+    required String actorUserId,
+    required String texto,
+    bool usarDeepSeek = false,
+  }) {
+    return _dataSource.clasificarSolicitud(
+      actorUserId: actorUserId,
+      texto: texto,
+      usarDeepSeek: usarDeepSeek,
+    );
+  }
+
+  @override
   Future<void> iniciarTramite({
     required String actorUserId,
     required String tramiteId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) {
     return _dataSource.iniciarTramite(
       actorUserId: actorUserId,
       tramiteId: tramiteId,
+      respuestasRequisitosIniciales: respuestasRequisitosIniciales,
     );
   }
 }

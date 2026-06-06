@@ -5,9 +5,16 @@ abstract class IniciarTramiteDataSource {
     required String actorUserId,
   });
 
+  Future<ClasificacionSolicitudResult> clasificarSolicitud({
+    required String actorUserId,
+    required String texto,
+    bool usarDeepSeek = false,
+  });
+
   Future<void> iniciarTramite({
     required String actorUserId,
     required String tramiteId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   });
 }
 
@@ -20,6 +27,7 @@ class IniciarTramiteMockDataSource implements IniciarTramiteDataSource {
           descripcion: 'Genera una solicitud digital para obtener la partida.',
           categoria: 'Registro civil',
           requierePago: false,
+          tieneRequisitosIniciales: true,
         ),
         TramiteDisponibleItem(
           id: 'tramite_002',
@@ -51,9 +59,38 @@ class IniciarTramiteMockDataSource implements IniciarTramiteDataSource {
   }
 
   @override
+  Future<ClasificacionSolicitudResult> clasificarSolicitud({
+    required String actorUserId,
+    required String texto,
+    bool usarDeepSeek = false,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    final TramiteDisponibleItem tramite = _tramitesMock.first;
+    return ClasificacionSolicitudResult(
+      politicaId: tramite.id,
+      nombrePolitica: tramite.nombre,
+      descripcionPolitica: tramite.descripcion,
+      confianza: 0.84,
+      origen: 'DEEP_LEARNING_SEMANTICO_DINAMICO',
+      requiereMasInformacion: false,
+      requiereConfirmacion: true,
+      mensaje:
+          'Detectamos que tu solicitud corresponde a ${tramite.nombre}. Confirma si deseas continuar.',
+      topResultados: <ClasificacionSolicitudItem>[
+        ClasificacionSolicitudItem(
+          politicaId: tramite.id,
+          nombrePolitica: tramite.nombre,
+          confianza: 0.84,
+        ),
+      ],
+    );
+  }
+
+  @override
   Future<void> iniciarTramite({
     required String actorUserId,
     required String tramiteId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
 

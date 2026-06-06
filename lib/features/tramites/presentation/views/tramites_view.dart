@@ -12,6 +12,7 @@ import '../../../../core/widgets/primary_button.dart';
 import '../../domain/entities/tramite_disponible.dart';
 import '../viewmodels/tramites_providers.dart';
 import '../viewmodels/tramites_state.dart';
+import 'requisitos_iniciales_sheet.dart';
 
 class TramitesView extends ConsumerStatefulWidget {
   const TramitesView({super.key, required this.actorUserId});
@@ -55,21 +56,44 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
         .cargarTramites(actorUserId: widget.actorUserId);
   }
 
-  Future<void> _iniciarTramite(TramiteDisponible tramite) {
-    if (_requierePagoValido(tramite)) {
-      return _mostrarModalPago(tramite);
+  Future<void> _iniciarTramite(TramiteDisponible tramite) async {
+    Map<String, dynamic>? respuestas;
+
+    if (tramite.tieneRequisitosIniciales) {
+      respuestas = await RequisitosInicialesSheet.show(
+        context,
+        actorUserId: widget.actorUserId,
+        tramite: tramite,
+      );
+
+      // Si el usuario cancela el modal, no iniciamos.
+      if (respuestas == null) return;
     }
 
-    return _iniciarTramiteGratis(tramite);
+    if (tramite.requierePago && _requierePagoValido(tramite)) {
+      return _mostrarModalPago(tramite, respuestas);
+    }
+
+    return _iniciarTramiteGratis(tramite, respuestas);
   }
 
-  Future<void> _iniciarTramiteGratis(TramiteDisponible tramite) {
+  Future<void> _iniciarTramiteGratis(
+    TramiteDisponible tramite,
+    Map<String, dynamic>? respuestas,
+  ) {
     return ref
         .read(tramitesViewModelProvider.notifier)
-        .iniciarTramite(actorUserId: widget.actorUserId, tramite: tramite);
+        .iniciarTramite(
+          actorUserId: widget.actorUserId,
+          tramite: tramite,
+          respuestasRequisitosIniciales: respuestas,
+        );
   }
 
-  Future<void> _mostrarModalPago(TramiteDisponible tramite) async {
+  Future<void> _mostrarModalPago(
+    TramiteDisponible tramite,
+    Map<String, dynamic>? respuestas,
+  ) async {
     if (!_requierePagoValido(tramite)) {
       _mostrarSnackBar(
         'Precio no configurado para este trámite.',
@@ -82,7 +106,10 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
 
     setState(() {
       _isPagoSheetOpen = true;
-      _pagoPendiente = _PagoPendiente(tramite: tramite);
+      _pagoPendiente = _PagoPendiente(
+        tramite: tramite,
+        respuestasRequisitosIniciales: respuestas,
+      );
     });
 
     await showModalBottomSheet<void>(
@@ -96,17 +123,23 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
           pagoService: pagoService,
           precioTexto: _formatearMonto(tramite),
           descripcionPago: _descripcionPago(tramite),
+          respuestasRequisitosIniciales: respuestas,
           onStripeSessionId: (String? sessionId) {
             setState(() {
               _pagoPendiente = _PagoPendiente(
                 tramite: tramite,
                 sessionId: sessionId,
+                respuestasRequisitosIniciales: respuestas,
               );
             });
           },
           onPaypalPagoId: (String? pagoId) {
             setState(() {
-              _pagoPendiente = _PagoPendiente(tramite: tramite, pagoId: pagoId);
+              _pagoPendiente = _PagoPendiente(
+                tramite: tramite,
+                pagoId: pagoId,
+                respuestasRequisitosIniciales: respuestas,
+              );
             });
           },
           onPagoConfirmado: () async {
@@ -114,7 +147,7 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
               Navigator.of(sheetContext).pop();
             }
 
-            await _finalizarPagoYIniciarTramite(tramite);
+            await _finalizarPagoYIniciarTramite(tramite, respuestas);
           },
         );
       },
@@ -128,8 +161,11 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
     }
   }
 
-  Future<void> _finalizarPagoYIniciarTramite(TramiteDisponible tramite) async {
-    await _iniciarTramiteGratis(tramite);
+  Future<void> _finalizarPagoYIniciarTramite(
+    TramiteDisponible tramite,
+    Map<String, dynamic>? respuestas,
+  ) async {
+    await _iniciarTramiteGratis(tramite, respuestas);
     if (mounted) {
       _mostrarSnackBar('Pago confirmado. Trámite iniciado.');
     }
@@ -176,7 +212,10 @@ class _TramitesViewState extends ConsumerState<TramitesView> {
         _pagoPendiente = null;
       });
 
-      await _finalizarPagoYIniciarTramite(pendiente.tramite);
+      await _finalizarPagoYIniciarTramite(
+        pendiente.tramite,
+        pendiente.respuestasRequisitosIniciales,
+      );
     } on ApiFailure catch (failure) {
       _mostrarSnackBar(failure.message, isError: true);
     } catch (_) {
@@ -474,6 +513,7 @@ class _PagoBottomSheetContent extends StatefulWidget {
     required this.pagoService,
     required this.precioTexto,
     required this.descripcionPago,
+    required this.respuestasRequisitosIniciales,
     required this.onStripeSessionId,
     required this.onPaypalPagoId,
     required this.onPagoConfirmado,
@@ -484,6 +524,7 @@ class _PagoBottomSheetContent extends StatefulWidget {
   final PagoService pagoService;
   final String precioTexto;
   final String descripcionPago;
+  final Map<String, dynamic>? respuestasRequisitosIniciales;
   final ValueChanged<String?> onStripeSessionId;
   final ValueChanged<String?> onPaypalPagoId;
   final Future<void> Function() onPagoConfirmado;
@@ -512,7 +553,9 @@ class _PagoBottomSheetContentState extends State<_PagoBottomSheetContent> {
     final bool isHttp = uri?.scheme.toLowerCase() == 'http';
     final bool isHttps = uri?.scheme.toLowerCase() == 'https';
     if (uri == null || (!isHttp && !isHttps)) {
-      throw ApiFailure(message: 'La URL de pago es invalida o no es compatible.');
+      throw ApiFailure(
+        message: 'La URL de pago es invalida o no es compatible.',
+      );
     }
 
     final bool launched = await launchUrl(
@@ -536,6 +579,7 @@ class _PagoBottomSheetContentState extends State<_PagoBottomSheetContent> {
           .crearCheckoutStripe(
             actorUserId: widget.actorUserId,
             politicaId: widget.tramite.id,
+            respuestasRequisitosIniciales: widget.respuestasRequisitosIniciales,
           );
 
       _stripeSessionId =
@@ -581,6 +625,7 @@ class _PagoBottomSheetContentState extends State<_PagoBottomSheetContent> {
           .crearLinkPaypal(
             actorUserId: widget.actorUserId,
             politicaId: widget.tramite.id,
+            respuestasRequisitosIniciales: widget.respuestasRequisitosIniciales,
           );
 
       _paypalPagoId = result.pagoId;
@@ -879,9 +924,15 @@ class _PagoInfoTile extends StatelessWidget {
 }
 
 class _PagoPendiente {
-  const _PagoPendiente({required this.tramite, this.sessionId, this.pagoId});
+  const _PagoPendiente({
+    required this.tramite,
+    this.sessionId,
+    this.pagoId,
+    this.respuestasRequisitosIniciales,
+  });
 
   final TramiteDisponible tramite;
   final String? sessionId;
   final String? pagoId;
+  final Map<String, dynamic>? respuestasRequisitosIniciales;
 }

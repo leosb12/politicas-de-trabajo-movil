@@ -5,8 +5,15 @@ abstract class IniciarTramiteRepository {
     required String actorUserId,
   });
 
+  Future<ClasificacionSolicitudResult> clasificarSolicitud({
+    required String actorUserId,
+    required String texto,
+    bool usarDeepSeek = false,
+  });
+
   Future<void> iniciarTramite({
     required String actorUserId,
     required String tramiteId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   });
 }

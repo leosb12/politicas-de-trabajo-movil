@@ -1,3 +1,4 @@
+import '../../../mobile_shell/domain/models/tarea_formulario_detalle.dart';
 import '../../domain/entities/instancia_iniciada.dart';
 import '../../domain/entities/tramite_disponible.dart';
 import '../../domain/repositories/tramites_repository.dart';
@@ -47,12 +48,27 @@ class TramitesRepositoryImpl implements TramitesRepository {
   Future<InstanciaIniciada> iniciarTramite({
     required String actorUserId,
     required String politicaId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     final model = await _remoteDataSource.iniciarTramite(
       actorUserId: actorUserId,
       politicaId: politicaId,
+      respuestasRequisitosIniciales: respuestasRequisitosIniciales,
     );
 
     return model.toEntity();
+  }
+
+  @override
+  Future<List<CampoFormularioDetalle>> obtenerRequisitosIniciales({
+    required String actorUserId,
+    required String politicaId,
+  }) async {
+    final models = await _remoteDataSource.obtenerRequisitosIniciales(
+      actorUserId: actorUserId,
+      politicaId: politicaId,
+    );
+
+    return models.map((model) => model.toDomain()).toList(growable: false);
   }
 }

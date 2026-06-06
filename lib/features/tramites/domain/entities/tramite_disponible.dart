@@ -7,6 +7,7 @@ class TramiteDisponible {
     required this.departamentoInicioId,
     required this.departamentoInicioNombre,
     this.requierePago = false,
+    this.tieneRequisitosIniciales = false,
     this.montoPago,
     this.monedaPago,
     this.descripcionPago,
@@ -19,6 +20,7 @@ class TramiteDisponible {
   final String? departamentoInicioId;
   final String? departamentoInicioNombre;
   final bool requierePago;
+  final bool tieneRequisitosIniciales;
   final double? montoPago;
   final String? monedaPago;
   final String? descripcionPago;

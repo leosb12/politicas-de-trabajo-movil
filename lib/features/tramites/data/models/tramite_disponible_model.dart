@@ -9,6 +9,7 @@ class TramiteDisponibleModel {
     required this.departamentoInicioId,
     required this.departamentoInicioNombre,
     required this.requierePago,
+    required this.tieneRequisitosIniciales,
     required this.montoPago,
     required this.monedaPago,
     required this.descripcionPago,
@@ -21,6 +22,7 @@ class TramiteDisponibleModel {
   final String? departamentoInicioId;
   final String? departamentoInicioNombre;
   final bool requierePago;
+  final bool tieneRequisitosIniciales;
   final double? montoPago;
   final String? monedaPago;
   final String? descripcionPago;
@@ -34,6 +36,7 @@ class TramiteDisponibleModel {
       departamentoInicioId: json['departamentoInicioId'] as String?,
       departamentoInicioNombre: json['departamentoInicioNombre'] as String?,
       requierePago: json['requierePago'] as bool? ?? false,
+      tieneRequisitosIniciales: json['tieneRequisitosIniciales'] as bool? ?? false,
       montoPago: _readMontoPago(json['montoPago']),
       monedaPago: json['monedaPago'] as String?,
       descripcionPago: json['descripcionPago'] as String?,
@@ -49,6 +52,7 @@ class TramiteDisponibleModel {
       departamentoInicioId: departamentoInicioId,
       departamentoInicioNombre: departamentoInicioNombre,
       requierePago: requierePago,
+      tieneRequisitosIniciales: tieneRequisitosIniciales,
       montoPago: montoPago,
       monedaPago: monedaPago,
       descripcionPago: descripcionPago,

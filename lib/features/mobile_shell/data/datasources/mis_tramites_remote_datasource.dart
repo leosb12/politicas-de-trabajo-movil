@@ -83,45 +83,178 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     required String usuarioId,
     required String instanciaId,
   }) async {
-    final Response<dynamic> response = await _dio.get(
-      NetworkConstants.archivosPorInstanciaPath(instanciaId),
-      options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
-    );
+    final List<DocumentoSeguimiento> result = <DocumentoSeguimiento>[];
 
-    final dynamic raw = response.data;
-    if (raw is! List<dynamic>) {
-      return const <DocumentoSeguimiento>[];
+    try {
+      final Response<dynamic> response = await _dio.get(
+        NetworkConstants.archivosPorInstanciaPath(instanciaId),
+        options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+      );
+
+      final dynamic raw = response.data;
+      if (raw is List<dynamic>) {
+        result.addAll(
+          raw
+              .map(_asJsonMap)
+              .whereType<Map<String, dynamic>>()
+              .map(_parseDocumentoSeguimiento)
+              .where(
+                (DocumentoSeguimiento item) =>
+                    item.puedeVer || item.urlAcceso.trim().isNotEmpty,
+              ),
+        );
+      }
+    } catch (_) {
+      // Ignorar si falla la obtención de archivos normales
     }
 
-    return raw
-        .map(_asJsonMap)
-        .whereType<Map<String, dynamic>>()
-        .map(_parseDocumentoSeguimiento)
-        .where((DocumentoSeguimiento item) => item.puedeVer)
-        .toList(growable: false);
+    try {
+      final Response<dynamic> colabResponse = await _dio.get(
+        NetworkConstants.documentosColaborativosPorTramitePath(instanciaId),
+        options: Options(headers: <String, String>{'X-User-Id': usuarioId}),
+      );
+
+      final dynamic rawColab = colabResponse.data;
+      if (rawColab is List<dynamic>) {
+        result.addAll(
+          rawColab
+              .map(_asJsonMap)
+              .whereType<Map<String, dynamic>>()
+              .map(_parseDocColabSeguimiento)
+              .whereType<DocumentoSeguimiento>()
+              .where((DocumentoSeguimiento item) => item.puedeVer),
+        );
+      }
+    } catch (_) {
+      // Ignorar si falla la obtención de documentos colaborativos
+    }
+
+    return result;
+  }
+
+  DocumentoSeguimiento? _parseDocColabSeguimiento(Map<String, dynamic> json) {
+    try {
+      final String documentoId = _stringValue(json['documentoId']);
+      if (documentoId.isEmpty) return null;
+
+      final Map<String, dynamic>? permisos =
+          json['permisosUsuario'] is Map<dynamic, dynamic>
+              ? (json['permisosUsuario'] as Map<dynamic, dynamic>).map(
+                  (dynamic k, dynamic v) =>
+                      MapEntry<String, dynamic>(k.toString(), v),
+                )
+              : json['permisosUsuario'] as Map<String, dynamic>?;
+
+      final bool puedeLeer = _boolValue(permisos?['puedeLeer']);
+      final bool puedeEditar = _boolValue(permisos?['puedeEditar']);
+
+      if (!puedeLeer) return null;
+
+      return DocumentoSeguimiento(
+        id: documentoId,
+        nombreOriginal: _stringValue(json['nombreDocumento']),
+        contentType: 'application/octet-stream',
+        extension: _stringValue(json['tipoDocumento']).toLowerCase(),
+        fechaSubida: _tryParseDateTime(json['fechaCreacion']),
+        subidoPor: _stringValue(json['creadoPor']),
+        subidoPorNombre: '',
+        estado: _stringValue(json['estado']),
+        tareaId: _stringValue(json['tareaId']),
+        actividadId: _stringValue(json['nodoId']),
+        campoId: _stringValue(json['campoFormularioId']),
+        urlAcceso: '',
+        puedeVer: puedeLeer,
+        puedeDescargar: _boolValue(permisos?['puedeDescargar']),
+        puedeEditar: puedeEditar,
+        puedeReemplazar: false,
+        puedeEliminar: false,
+        documentoColaborativoId: documentoId,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   DocumentoSeguimiento _parseDocumentoSeguimiento(Map<String, dynamic> json) {
+    final String urlAcceso = _stringByKeys(json, <String>[
+      'urlAcceso',
+      'onlyOfficeUrl',
+      'urlOnlyOffice',
+      'viewerUrl',
+      'viewUrl',
+      'editorUrl',
+      'url',
+    ]);
+    // documentoColaborativoId links this ArchivoAdjunto to the DynamoDB
+    // collaborative document record. The backend may surface it under several
+    // keys, or we can extract it from the urlAcceso path when it follows the
+    // pattern /api/documentos-colaborativos/{documentoId}/...
+    String documentoColaborativoId = _stringByKeys(json, <String>[
+      'documentoColaborativoId',
+      'documentoId',
+      'colabDocId',
+    ]);
+    if (documentoColaborativoId.isEmpty && urlAcceso.isNotEmpty) {
+      documentoColaborativoId = _extractDocumentoIdFromUrl(urlAcceso);
+    }
     return DocumentoSeguimiento(
-      id: _stringValue(json['id']),
-      nombreOriginal: _stringValue(json['nombreOriginal']),
-      contentType: _stringValue(json['contentType']),
-      extension: _stringValue(json['extension']),
+      id: _stringByKeys(json, <String>['id', 'archivoId']),
+      nombreOriginal: _stringByKeys(json, <String>[
+        'nombreOriginal',
+        'nombreArchivo',
+        'filename',
+        'name',
+      ]),
+      contentType: _stringByKeys(json, <String>['contentType', 'mimeType']),
+      extension: _stringByKeys(json, <String>['extension', 'ext']),
       fechaSubida: _tryParseDateTime(json['fechaSubida']),
       subidoPor: _stringValue(json['subidoPor']),
       subidoPorNombre: _stringValue(json['subidoPorNombre']),
       estado: _stringValue(json['estado']),
-      tareaId: _stringValue(json['tareaId']),
-      actividadId: _stringValue(json['actividadId']),
+      tareaId: _stringByKeys(json, <String>['tareaId', 'taskId']),
+      actividadId: _stringByKeys(json, <String>['actividadId', 'activityId']),
       campoId: _stringValue(json['campoId']),
-      urlAcceso: _stringValue(json['urlAcceso']),
-      puedeVer: _boolValue(json['puedeVer']),
+      urlAcceso: urlAcceso,
+      puedeVer:
+          _boolByKeys(json, <String>[
+            'puedeVer',
+            'puedeVisualizar',
+            'permisoLectura',
+            'canView',
+          ]) ||
+          urlAcceso.isNotEmpty,
       puedeDescargar: _boolValue(json['puedeDescargar']),
       puedeEditar: _boolValue(json['puedeEditar']),
       puedeReemplazar: _boolValue(json['puedeReemplazar']),
       puedeEliminar: _boolValue(json['puedeEliminar']),
+      documentoColaborativoId:
+          documentoColaborativoId.isNotEmpty ? documentoColaborativoId : null,
     );
   }
+
+  /// Tries to extract documentoId from a URL like:
+  /// http://host/api/documentos-colaborativos/{documentoId}/source
+  String _extractDocumentoIdFromUrl(String url) {
+    try {
+      final Uri? uri = Uri.tryParse(url);
+      if (uri == null) return '';
+      final List<String> segments = uri.pathSegments;
+      // Look for the segment after 'documentos-colaborativos'
+      for (int i = 0; i < segments.length - 1; i++) {
+        if (segments[i] == 'documentos-colaborativos') {
+          final String candidate = segments[i + 1].trim();
+          if (candidate.isNotEmpty &&
+              !candidate.startsWith('onlyoffice') &&
+              candidate != 'source' &&
+              candidate != 'mobile-viewer') {
+            return candidate;
+          }
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
 
   @override
   Future<DocumentoArchivoBinario> verDocumento({
@@ -321,7 +454,7 @@ class MisTramitesRemoteDataSource implements MisTramitesDataSource {
     return (porcentaje / 100).clamp(0, 1).toDouble();
   }
 
-String _stringValue(dynamic value) {
+  String _stringValue(dynamic value) {
     return value?.toString().trim() ?? '';
   }
 
@@ -345,6 +478,25 @@ String _stringValue(dynamic value) {
       return value.trim().toLowerCase() == 'true';
     }
     return false;
+  }
+
+  bool _boolByKeys(Map<String, dynamic> json, List<String> keys) {
+    for (final String key in keys) {
+      if (_boolValue(json[key])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String _stringByKeys(Map<String, dynamic> json, List<String> keys) {
+    for (final String key in keys) {
+      final String value = _stringValue(json[key]);
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+    return '';
   }
 
   Map<String, dynamic>? _asJsonMap(dynamic value) {

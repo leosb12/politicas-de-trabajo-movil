@@ -20,8 +20,8 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
     );
 
     try {
-      final List<TramiteDisponibleItem> tramites =
-          await _repository.obtenerTramitesActivos(actorUserId: actorUserId);
+      final List<TramiteDisponibleItem> tramites = await _repository
+          .obtenerTramitesActivos(actorUserId: actorUserId);
 
       state = state.copyWith(
         isLoading: false,
@@ -50,6 +50,7 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
   Future<String?> iniciarTramite({
     required String actorUserId,
     required String tramiteId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     if (state.isIniciando(tramiteId)) {
       return null;
@@ -65,13 +66,13 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
       await _repository.iniciarTramite(
         actorUserId: actorUserId,
         tramiteId: tramiteId,
+        respuestasRequisitosIniciales: respuestasRequisitosIniciales,
       );
 
       final List<TramiteDisponibleItem> actualizados = state.tramites
           .map(
-            (TramiteDisponibleItem item) => item.id == tramiteId
-                ? item.copyWith(iniciado: true)
-                : item,
+            (TramiteDisponibleItem item) =>
+                item.id == tramiteId ? item.copyWith(iniciado: true) : item,
           )
           .toList();
 
@@ -90,5 +91,60 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
       state = state.copyWith(iniciandoTramiteIds: iniciando);
       return 'No se pudo iniciar el trámite. Intenta nuevamente.';
     }
+  }
+
+  Future<void> clasificarSolicitud({
+    required String actorUserId,
+    required String texto,
+    bool usarDeepSeek = false,
+  }) async {
+    final String textoNormalizado = texto.trim();
+    if (textoNormalizado.isEmpty) {
+      state = state.copyWith(
+        classificationError: 'Describe brevemente que necesitas.',
+        clearClassification: true,
+      );
+      return;
+    }
+
+    state = state.copyWith(
+      isClassifying: true,
+      clearClassification: true,
+      clearClassificationError: true,
+    );
+
+    try {
+      final ClasificacionSolicitudResult result = await _repository
+          .clasificarSolicitud(
+            actorUserId: actorUserId,
+            texto: textoNormalizado,
+            usarDeepSeek: usarDeepSeek,
+          );
+
+      state = state.copyWith(
+        isClassifying: false,
+        classification: result,
+        clearClassificationError: true,
+      );
+    } on ApiFailure catch (failure) {
+      state = state.copyWith(
+        isClassifying: false,
+        classificationError: failure.message,
+        clearClassification: true,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        isClassifying: false,
+        classificationError: 'No se pudo recomendar un tramite.',
+        clearClassification: true,
+      );
+    }
+  }
+
+  void limpiarClasificacion() {
+    state = state.copyWith(
+      clearClassification: true,
+      clearClassificationError: true,
+    );
   }
 }

@@ -51,11 +51,18 @@ class PagoService {
   Future<StripeCheckoutResult> crearCheckoutStripe({
     required String actorUserId,
     required String politicaId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     try {
+      final Map<String, dynamic> request = <String, dynamic>{
+        'politicaId': politicaId,
+        if (respuestasRequisitosIniciales != null)
+          'respuestasRequisitosIniciales': respuestasRequisitosIniciales,
+      };
+
       final Response<dynamic> response = await _dio.post(
         NetworkConstants.stripeCheckoutPath,
-        data: jsonEncode(<String, String>{'politicaId': politicaId}),
+        data: jsonEncode(request),
         options: Options(
           contentType: Headers.jsonContentType,
           headers: <String, String>{'X-User-Id': actorUserId},
@@ -78,9 +85,7 @@ class PagoService {
       final Response<dynamic> response = await _dio.get(
         NetworkConstants.stripeVerificarPath,
         queryParameters: <String, dynamic>{'sessionId': sessionId},
-        options: Options(
-          headers: <String, String>{'X-User-Id': actorUserId},
-        ),
+        options: Options(headers: <String, String>{'X-User-Id': actorUserId}),
       );
 
       return _parseStripeVerificationResult(response.data);
@@ -94,11 +99,18 @@ class PagoService {
   Future<PaypalCheckoutResult> crearLinkPaypal({
     required String actorUserId,
     required String politicaId,
+    Map<String, dynamic>? respuestasRequisitosIniciales,
   }) async {
     try {
+      final Map<String, dynamic> request = <String, dynamic>{
+        'politicaId': politicaId,
+        if (respuestasRequisitosIniciales != null)
+          'respuestasRequisitosIniciales': respuestasRequisitosIniciales,
+      };
+
       final Response<dynamic> response = await _dio.post(
         NetworkConstants.paypalCrearLinkPath,
-        data: jsonEncode(<String, String>{'politicaId': politicaId}),
+        data: jsonEncode(request),
         options: Options(
           contentType: Headers.jsonContentType,
           headers: <String, String>{'X-User-Id': actorUserId},
@@ -120,9 +132,7 @@ class PagoService {
     try {
       final Response<dynamic> response = await _dio.get(
         NetworkConstants.pagoPath(pagoId),
-        options: Options(
-          headers: <String, String>{'X-User-Id': actorUserId},
-        ),
+        options: Options(headers: <String, String>{'X-User-Id': actorUserId}),
       );
 
       return _parsePagoDetalle(response.data, fallbackId: pagoId);

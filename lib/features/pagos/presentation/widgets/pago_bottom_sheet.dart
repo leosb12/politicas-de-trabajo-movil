@@ -14,6 +14,7 @@ class PagoBottomSheet extends StatefulWidget {
     required this.precioTexto,
     required this.descripcionPago,
     required this.onStripeSessionId,
+    this.respuestasRequisitosIniciales,
     this.onStripeCheckoutOpened,
     required this.onPaypalPagoId,
     required this.onPagoConfirmado,
@@ -25,6 +26,7 @@ class PagoBottomSheet extends StatefulWidget {
   final PagoService pagoService;
   final String precioTexto;
   final String descripcionPago;
+  final Map<String, dynamic>? respuestasRequisitosIniciales;
   final ValueChanged<String?> onStripeSessionId;
   final VoidCallback? onStripeCheckoutOpened;
   final ValueChanged<String?> onPaypalPagoId;
@@ -53,7 +55,9 @@ class _PagoBottomSheetState extends State<PagoBottomSheet> {
     final bool isHttp = uri?.scheme.toLowerCase() == 'http';
     final bool isHttps = uri?.scheme.toLowerCase() == 'https';
     if (uri == null || (!isHttp && !isHttps)) {
-      throw ApiFailure(message: 'La URL de pago es invalida o no es compatible.');
+      throw ApiFailure(
+        message: 'La URL de pago es invalida o no es compatible.',
+      );
     }
 
     final bool launched = await launchUrl(
@@ -77,6 +81,7 @@ class _PagoBottomSheetState extends State<PagoBottomSheet> {
           .crearCheckoutStripe(
             actorUserId: widget.actorUserId,
             politicaId: widget.tramiteId,
+            respuestasRequisitosIniciales: widget.respuestasRequisitosIniciales,
           );
 
       _stripeSessionId =
@@ -124,6 +129,7 @@ class _PagoBottomSheetState extends State<PagoBottomSheet> {
           .crearLinkPaypal(
             actorUserId: widget.actorUserId,
             politicaId: widget.tramiteId,
+            respuestasRequisitosIniciales: widget.respuestasRequisitosIniciales,
           );
 
       _paypalPagoId = result.pagoId;

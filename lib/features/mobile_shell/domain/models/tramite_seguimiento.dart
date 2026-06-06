@@ -55,6 +55,7 @@ class DocumentoSeguimiento {
     required this.puedeEditar,
     required this.puedeReemplazar,
     required this.puedeEliminar,
+    this.documentoColaborativoId,
   });
 
   final String id;
@@ -74,6 +75,15 @@ class DocumentoSeguimiento {
   final bool puedeEditar;
   final bool puedeReemplazar;
   final bool puedeEliminar;
+  /// ID del documento colaborativo en DynamoDB (documentoId).
+  /// Presente sólo cuando el archivo es un DOCUMENTO_COLABORATIVO de OnlyOffice.
+  final String? documentoColaborativoId;
+
+  /// Returns true if this document is an OnlyOffice collaborative document
+  /// that can be opened in the mobile viewer.
+  bool get esDocumentoColaborativo =>
+      documentoColaborativoId != null &&
+      documentoColaborativoId!.trim().isNotEmpty;
 }
 
 class NodoSeguimiento {

@@ -45,6 +45,8 @@ class NetworkConstants {
   static const String resetPasswordPath = '/api/auth/reset-password';
   static const String availableTramitesPath =
       '/api/politicas/movil/disponibles';
+  static const String clasificarSolicitudMovilPath =
+      '/api/movil/ia/clasificar-solicitud';
   static const String instanciasPath = '/api/instancias';
   static const String stripeCheckoutPath = '/api/pagos/stripe/crear-checkout';
   static const String stripeVerificarPath = '/api/pagos/stripe/verificar';
@@ -71,6 +73,11 @@ class NetworkConstants {
   static String instanciaFlujoPath(String instanciaId) {
     final String encodedInstanciaId = Uri.encodeComponent(instanciaId);
     return '$instanciasPath/$encodedInstanciaId/flujo';
+  }
+
+  static String requisitosInicialesPath(String politicaId) {
+    final String encodedId = Uri.encodeComponent(politicaId);
+    return '/api/politicas/$encodedId/requisitos-iniciales';
   }
 
   static String tareaDetallePath(String tareaId) {
@@ -104,6 +111,20 @@ class NetworkConstants {
     return '${archivoDetallePath(archivoId)}/replace';
   }
 
+  static String documentoColaborativoMobileViewerPath(String documentoId) {
+    return '/api/documentos-colaborativos/${Uri.encodeComponent(documentoId)}/mobile-viewer';
+  }
+
+  static String documentosColaborativosPorTramitePath(String tramiteId) {
+    final String encodedId = Uri.encodeComponent(tramiteId);
+    return '/api/tramites/$encodedId/documentos-colaborativos';
+  }
+
+  static String documentosColaborativosPorTareaPath(String tareaId) {
+    final String encodedId = Uri.encodeComponent(tareaId);
+    return '/api/tareas/$encodedId/documentos-colaborativos';
+  }
+
   static List<String> get _defaultBaseUrlsForCurrentPlatform {
     if (kIsWeb) {
       return const <String>[
@@ -115,16 +136,9 @@ class NetworkConstants {
 
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        return const <String>[
-          'http://10.0.2.2:8080',
-          'http://localhost:8080',
-          _legacyLanBaseUrl,
-        ];
+        return const <String>['http://localhost:8080', _legacyLanBaseUrl];
       case TargetPlatform.iOS:
-        return const <String>[
-          'http://localhost:8080',
-          _legacyLanBaseUrl,
-        ];
+        return const <String>['http://localhost:8080', _legacyLanBaseUrl];
       case TargetPlatform.macOS:
       case TargetPlatform.linux:
       case TargetPlatform.windows:

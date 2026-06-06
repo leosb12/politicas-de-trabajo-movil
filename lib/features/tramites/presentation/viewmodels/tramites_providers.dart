@@ -6,6 +6,7 @@ import '../../data/datasource/tramites_remote_datasource.dart';
 import '../../data/repositories/tramites_repository_impl.dart';
 import '../../domain/repositories/tramites_repository.dart';
 import '../../domain/usecases/iniciar_tramite_usecase.dart';
+import '../../domain/usecases/obtener_requisitos_iniciales_usecase.dart';
 import '../../domain/usecases/obtener_tramites_disponibles_usecase.dart';
 import 'tramites_state.dart';
 import 'tramites_view_model.dart';
@@ -36,6 +37,13 @@ final obtenerTramitesDisponiblesUseCaseProvider =
 final iniciarTramiteUseCaseProvider = Provider<IniciarTramiteUseCase>((ref) {
   return IniciarTramiteUseCase(ref.watch(tramitesRepositoryProvider));
 });
+
+final obtenerRequisitosInicialesUseCaseProvider =
+    Provider<ObtenerRequisitosInicialesUseCase>((ref) {
+      return ObtenerRequisitosInicialesUseCase(
+        ref.watch(tramitesRepositoryProvider),
+      );
+    });
 
 final tramitesViewModelProvider =
     StateNotifierProvider<TramitesViewModel, TramitesState>((ref) {

@@ -67,6 +67,8 @@ class TramiteDisponibleCard extends StatelessWidget {
               runSpacing: 8,
               children: <Widget>[
                 Chip(label: Text(etiquetaEstado)),
+                if (tramite.tieneRequisitosIniciales)
+                  const Chip(label: Text('Requisitos previos')),
                 if (requierePago)
                   Chip(label: Text(precioTexto))
                 else
