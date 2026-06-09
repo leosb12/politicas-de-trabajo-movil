@@ -35,6 +35,7 @@ class IniciarTramiteRemoteDataSource implements IniciarTramiteDataSource {
     required String actorUserId,
     required String texto,
     bool usarDeepSeek = false,
+    String? nombreDocumento,
   }) async {
     try {
       final Response<dynamic> response = await _dio.post(
@@ -42,6 +43,7 @@ class IniciarTramiteRemoteDataSource implements IniciarTramiteDataSource {
         data: jsonEncode(<String, dynamic>{
           'texto': texto,
           'usarDeepSeek': usarDeepSeek,
+          if (nombreDocumento != null) 'nombreDocumento': nombreDocumento,
         }),
         options: Options(
           contentType: Headers.jsonContentType,

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
+import '../../../../core/offline/offline_providers.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../data/datasources/iniciar_tramite_mock_datasource.dart';
 import '../../data/datasources/iniciar_tramite_remote_datasource.dart';
@@ -29,7 +30,10 @@ final iniciarTramiteRepositoryProvider = Provider<IniciarTramiteRepository>((
   ref,
 ) {
   return IniciarTramiteRepositoryImpl(
-    ref.watch(iniciarTramiteDataSourceProvider),
+    remoteDataSource: ref.watch(iniciarTramiteDataSourceProvider),
+    snapshotStore: ref.watch(snapshotStoreProvider),
+    queueStore: ref.watch(offlineQueueStoreProvider),
+    connectivity: ref.watch(connectivityNotifierProvider.notifier),
   );
 });
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/network/pago_service.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
@@ -30,6 +31,7 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
   bool _usarDeepSeek = false;
   bool _speechDisponible = false;
   bool _escuchandoVoz = false;
+  PlatformFile? _selectedFile;
 
   @override
   void initState() {
@@ -42,6 +44,36 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
     _speech.cancel();
     _necesidadController.dispose();
     super.dispose();
+  }
+
+  Future<void> _subirDocumento() async {
+    try {
+      final FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: <String>['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg'],
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedFile = result.files.first;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error al seleccionar archivo: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo seleccionar el archivo.')),
+        );
+      }
+    }
+  }
+
+  String? _obtenerNombreDocumento() {
+    if (_selectedFile == null) return null;
+    final String name = _selectedFile!.name;
+    final int lastDot = name.lastIndexOf('.');
+    final String nameWithoutExt = lastDot == -1 ? name : name.substring(0, lastDot);
+    return nameWithoutExt.replaceAll(RegExp(r'[-_]'), ' ').trim();
   }
 
   Future<void> _inicializarVoz() async {
@@ -466,14 +498,22 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
                   isIniciandoRecomendado: state.classification == null
                       ? false
                       : state.isIniciando(state.classification!.politicaId),
+                  selectedFile: _selectedFile,
+                  onPickFile: _subirDocumento,
+                  onRemoveFile: () => setState(() => _selectedFile = null),
                   onClassify: () {
                     viewModel.clasificarSolicitud(
                       actorUserId: actorUserId,
-                      texto: _necesidadController.text, usarDeepSeek: _usarDeepSeek,
+                      texto: _necesidadController.text,
+                      usarDeepSeek: _usarDeepSeek,
+                      nombreDocumento: _obtenerNombreDocumento(),
                     );
                   },
                   onClear: () {
                     _necesidadController.clear();
+                    setState(() {
+                      _selectedFile = null;
+                    });
                     viewModel.limpiarClasificacion();
                   },
                   onIniciar: (TramiteDisponibleItem tramite) {
@@ -534,6 +574,9 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
     required this.onUsarDeepSeekChanged,
     required this.escuchandoVoz,
     required this.onToggleVoz,
+    required this.selectedFile,
+    required this.onPickFile,
+    required this.onRemoveFile,
   });
 
   final TextEditingController controller;
@@ -549,6 +592,9 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
   final ValueChanged<bool> onUsarDeepSeekChanged;
   final bool escuchandoVoz;
   final VoidCallback onToggleVoz;
+  final PlatformFile? selectedFile;
+  final VoidCallback onPickFile;
+  final VoidCallback onRemoveFile;
 
   @override
   Widget build(BuildContext context) {
@@ -596,6 +642,48 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            if (selectedFile != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.description_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        selectedFile!.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.delete_outline_rounded,
+                        color: theme.colorScheme.error,
+                      ),
+                      onPressed: isClassifying ? null : onRemoveFile,
+                    ),
+                  ],
+                ),
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: isClassifying ? null : onPickFile,
+                icon: const Icon(Icons.upload_file_rounded),
+                label: const Text('Sube tu documento'),
+              ),
             const SizedBox(height: 10),
             Row(
               children: <Widget>[

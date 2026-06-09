@@ -1,6 +1,8 @@
+import '../../../../core/offline/offline_profile_store.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../domain/entities/authenticated_user.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../datasource/auth_offline_datasource.dart';
 import '../datasource/auth_remote_datasource.dart';
 import '../models/change_password_request_model.dart';
 import '../models/forgot_password_request_model.dart';
@@ -12,11 +14,14 @@ class AuthRepositoryImpl implements AuthRepository {
   AuthRepositoryImpl({
     required AuthRemoteDataSource remoteDataSource,
     required SessionStorage sessionStorage,
-  }) : _remoteDataSource = remoteDataSource,
-       _sessionStorage = sessionStorage;
+    required OfflineProfileStore offlineProfileStore,
+  })  : _remoteDataSource = remoteDataSource,
+        _sessionStorage = sessionStorage,
+        _offlineDataSource = AuthOfflineDataSource(offlineProfileStore);
 
   final AuthRemoteDataSource _remoteDataSource;
   final SessionStorage _sessionStorage;
+  final AuthOfflineDataSource _offlineDataSource;
 
   @override
   Future<AuthenticatedUser> login({
@@ -28,8 +33,21 @@ class AuthRepositoryImpl implements AuthRepository {
     );
 
     final AuthenticatedUser user = response.toEntity();
+
+    // Guardar sesión y perfil offline (sin contraseña)
     await _sessionStorage.saveSession(user.toJson());
+
     return user;
+  }
+
+  @override
+  Future<AuthenticatedUser> loginOffline({required String correo}) async {
+    return _offlineDataSource.loginOffline(correo.trim());
+  }
+
+  @override
+  bool hasOfflineProfile({required String correo}) {
+    return _offlineDataSource.hasOfflineProfile(correo.trim());
   }
 
   @override
@@ -107,5 +125,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> clearSession() async {
     await _sessionStorage.clearSession();
+    // Nota: NO borramos el perfil offline al cerrar sesión
+    // para que el usuario pueda volver a entrar sin internet
   }
 }

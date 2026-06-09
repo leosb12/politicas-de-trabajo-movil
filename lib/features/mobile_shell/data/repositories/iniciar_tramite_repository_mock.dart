@@ -19,11 +19,13 @@ class IniciarTramiteRepositoryMock implements IniciarTramiteRepository {
     required String actorUserId,
     required String texto,
     bool usarDeepSeek = false,
+    String? nombreDocumento,
   }) {
     return _dataSource.clasificarSolicitud(
       actorUserId: actorUserId,
       texto: texto,
       usarDeepSeek: usarDeepSeek,
+      nombreDocumento: nombreDocumento,
     );
   }
 

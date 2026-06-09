@@ -6,6 +6,10 @@ class LoginState {
     required this.isCheckingSession,
     required this.errorMessage,
     required this.authenticatedUser,
+    this.isOfflineSession = false,
+    this.offlineSyncReady = false,
+    this.isSyncingInitial = false,
+    this.offlineSyncMessage,
   });
 
   factory LoginState.initial() {
@@ -14,6 +18,9 @@ class LoginState {
       isCheckingSession: true,
       errorMessage: null,
       authenticatedUser: null,
+      isOfflineSession: false,
+      offlineSyncReady: false,
+      isSyncingInitial: false,
     );
   }
 
@@ -21,6 +28,18 @@ class LoginState {
   final bool isCheckingSession;
   final String? errorMessage;
   final AuthenticatedUser? authenticatedUser;
+
+  /// true si la sesión actual es offline (sin token válido del servidor).
+  final bool isOfflineSession;
+
+  /// true después de que la sincronización inicial completó exitosamente.
+  final bool offlineSyncReady;
+
+  /// true mientras se ejecuta la sincronización inicial post-login.
+  final bool isSyncingInitial;
+
+  /// Mensaje descriptivo de la sincronización (ej: "Modo offline listo").
+  final String? offlineSyncMessage;
 
   bool get isAuthenticated => authenticatedUser != null;
 
@@ -31,6 +50,11 @@ class LoginState {
     bool clearError = false,
     AuthenticatedUser? authenticatedUser,
     bool clearAuthenticatedUser = false,
+    bool? isOfflineSession,
+    bool? offlineSyncReady,
+    bool? isSyncingInitial,
+    String? offlineSyncMessage,
+    bool clearOfflineSyncMessage = false,
   }) {
     return LoginState(
       isLoading: isLoading ?? this.isLoading,
@@ -39,6 +63,12 @@ class LoginState {
       authenticatedUser: clearAuthenticatedUser
           ? null
           : (authenticatedUser ?? this.authenticatedUser),
+      isOfflineSession: isOfflineSession ?? this.isOfflineSession,
+      offlineSyncReady: offlineSyncReady ?? this.offlineSyncReady,
+      isSyncingInitial: isSyncingInitial ?? this.isSyncingInitial,
+      offlineSyncMessage: clearOfflineSyncMessage
+          ? null
+          : (offlineSyncMessage ?? this.offlineSyncMessage),
     );
   }
 }

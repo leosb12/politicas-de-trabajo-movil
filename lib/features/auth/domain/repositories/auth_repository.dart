@@ -6,6 +6,13 @@ abstract class AuthRepository {
     required String password,
   });
 
+  /// Login offline usando un correo previamente sincronizado.
+  /// No requiere contraseña. Lanza [ApiFailure] si no hay perfil offline.
+  Future<AuthenticatedUser> loginOffline({required String correo});
+
+  /// Retorna true si existe un perfil offline para el correo.
+  bool hasOfflineProfile({required String correo});
+
   Future<AuthenticatedUser> register({
     required String name,
     required String email,
@@ -30,3 +37,4 @@ abstract class AuthRepository {
 
   Future<void> clearSession();
 }
+

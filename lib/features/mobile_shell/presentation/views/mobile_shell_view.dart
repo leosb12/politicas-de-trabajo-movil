@@ -6,6 +6,7 @@ import '../../../guia_usuario_movil/dominio/modelos/contexto_guia_usuario_movil.
 import '../../../guia_usuario_movil/presentacion/widgets/boton_guia_usuario_movil.dart';
 import '../viewmodels/mobile_shell_providers.dart';
 import '../widgets/mobile_bottom_nav_bar.dart';
+import '../widgets/offline_status_banner.dart';
 import 'iniciar_tramite_view.dart';
 import 'mis_tramites_view.dart';
 import 'perfil_view.dart';
@@ -33,8 +34,8 @@ class _MobileShellViewState extends ConsumerState<MobileShellView> {
     ];
 
     final List<String> titles = <String>[
-      'Iniciar tramite',
-      'Mis tramites',
+      'Iniciar trámite',
+      'Mis trámites',
       'Perfil',
     ];
     final String usuarioId = authState.authenticatedUser?.id.trim() ?? '';
@@ -48,6 +49,10 @@ class _MobileShellViewState extends ConsumerState<MobileShellView> {
       appBar: AppBar(
         title: Text(titles[shellState.currentIndex]),
         centerTitle: false,
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(0),
+          child: OfflineStatusBanner(),
+        ),
       ),
       body: SafeArea(
         child: IndexedStack(index: shellState.currentIndex, children: pages),

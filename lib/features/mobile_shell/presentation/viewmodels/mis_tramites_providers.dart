@@ -1,9 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
+import '../../../../core/offline/offline_providers.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../data/datasources/mis_tramites_mock_datasource.dart';
 import '../../data/datasources/mis_tramites_remote_datasource.dart';
+import '../../data/datasources/tarea_formulario_offline_datasource.dart';
 import '../../data/repositories/mis_tramites_repository_impl.dart';
 import '../../domain/repositories/mis_tramites_repository.dart';
 import 'mis_tramites_state.dart';
@@ -26,7 +28,11 @@ final misTramitesDataSourceProvider = Provider<MisTramitesDataSource>((ref) {
 });
 
 final misTramitesRepositoryProvider = Provider<MisTramitesRepository>((ref) {
-  return MisTramitesRepositoryImpl(ref.watch(misTramitesDataSourceProvider));
+  return MisTramitesRepositoryImpl(
+    remoteDataSource: ref.watch(misTramitesDataSourceProvider),
+    snapshotStore: ref.watch(snapshotStoreProvider),
+    connectivity: ref.watch(connectivityNotifierProvider.notifier),
+  );
 });
 
 final misTramitesViewModelProvider =
@@ -48,3 +54,14 @@ final tramiteSeguimientoViewModelProvider = StateNotifierProvider.autoDispose
         instanciaId: args.instanciaId,
       );
     });
+
+// ── Tarea formulario offline-first ──────────────────────────────────────────
+
+/// Datasource offline para tareas — usado directamente en la view/viewmodel.
+final tareaFormularioOfflineDataSourceProvider =
+    Provider<TareaFormularioOfflineDataSource>((ref) {
+  return TareaFormularioOfflineDataSource(
+    snapshotStore: ref.watch(snapshotStoreProvider),
+    queueStore: ref.watch(offlineQueueStoreProvider),
+  );
+});

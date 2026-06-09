@@ -9,6 +9,7 @@ abstract class IniciarTramiteDataSource {
     required String actorUserId,
     required String texto,
     bool usarDeepSeek = false,
+    String? nombreDocumento,
   });
 
   Future<void> iniciarTramite({
@@ -63,6 +64,7 @@ class IniciarTramiteMockDataSource implements IniciarTramiteDataSource {
     required String actorUserId,
     required String texto,
     bool usarDeepSeek = false,
+    String? nombreDocumento,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 700));
     final TramiteDisponibleItem tramite = _tramitesMock.first;

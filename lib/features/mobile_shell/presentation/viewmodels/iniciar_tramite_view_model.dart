@@ -97,11 +97,12 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
     required String actorUserId,
     required String texto,
     bool usarDeepSeek = false,
+    String? nombreDocumento,
   }) async {
     final String textoNormalizado = texto.trim();
-    if (textoNormalizado.isEmpty) {
+    if (textoNormalizado.isEmpty && (nombreDocumento == null || nombreDocumento.trim().isEmpty)) {
       state = state.copyWith(
-        classificationError: 'Describe brevemente que necesitas.',
+        classificationError: 'Describe brevemente que necesitas o sube un documento.',
         clearClassification: true,
       );
       return;
@@ -119,6 +120,7 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
             actorUserId: actorUserId,
             texto: textoNormalizado,
             usarDeepSeek: usarDeepSeek,
+            nombreDocumento: nombreDocumento,
           );
 
       state = state.copyWith(

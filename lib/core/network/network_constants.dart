@@ -38,6 +38,7 @@ class NetworkConstants {
     return resolved;
   }
 
+  static const String healthCheckPath = '/api/health';
   static const String mobileLoginPath = '/api/auth/movil/login';
   static const String mobileRegisterPath = '/api/auth/movil/register';
   static const String changePasswordPath = '/api/auth/cambiar-contrasena';

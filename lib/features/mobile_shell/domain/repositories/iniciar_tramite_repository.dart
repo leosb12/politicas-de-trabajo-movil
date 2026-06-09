@@ -9,6 +9,7 @@ abstract class IniciarTramiteRepository {
     required String actorUserId,
     required String texto,
     bool usarDeepSeek = false,
+    String? nombreDocumento,
   });
 
   Future<void> iniciarTramite({

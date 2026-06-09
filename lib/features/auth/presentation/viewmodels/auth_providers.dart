@@ -1,9 +1,7 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/network/api_client.dart';
-import '../../../../core/network/network_constants.dart';
 import '../../../../core/notifications/push_notification_service.dart';
+import '../../../../core/offline/offline_providers.dart';
 import '../../../../core/storage/session_storage.dart';
 import '../../../../core/storage/shared_preferences_provider.dart';
 import '../../data/datasource/auth_remote_datasource.dart';
@@ -19,17 +17,9 @@ import 'login_state.dart';
 import 'password_recovery_state.dart';
 import 'password_recovery_view_model.dart';
 
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final List<String> urls = NetworkConstants.baseUrls;
-  return ApiClient(
-    baseUrl: urls.first,
-    fallbackBaseUrls: urls.skip(1).toList(),
-  );
-});
-
-final dioProvider = Provider<Dio>((ref) {
-  return ref.watch(apiClientProvider).dio;
-});
+/// Expose the core Dio instance for features that import from auth_providers.
+/// Internally delegates to coreDioProvider to avoid circular dependencies.
+final dioProvider = coreDioProvider;
 
 final sessionStorageProvider = Provider<SessionStorage>((ref) {
   return SessionStorage(ref.watch(sharedPreferencesProvider));
@@ -38,17 +28,18 @@ final sessionStorageProvider = Provider<SessionStorage>((ref) {
 final pushNotificationServiceProvider = Provider<PushNotificationService>((
   ref,
 ) {
-  return PushNotificationService(dio: ref.watch(dioProvider));
+  return PushNotificationService(dio: ref.watch(coreDioProvider));
 });
 
 final authRemoteDataSourceProvider = Provider<AuthRemoteDataSource>((ref) {
-  return AuthRemoteDataSourceImpl(ref.watch(dioProvider));
+  return AuthRemoteDataSourceImpl(ref.watch(coreDioProvider));
 });
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(
     remoteDataSource: ref.watch(authRemoteDataSourceProvider),
     sessionStorage: ref.watch(sessionStorageProvider),
+    offlineProfileStore: ref.watch(offlineProfileBoxProvider),
   );
 });
 
@@ -84,10 +75,13 @@ final authViewModelProvider = StateNotifierProvider<AuthViewModel, LoginState>((
     logoutUseCase: ref.watch(logoutUseCaseProvider),
     changePasswordUseCase: ref.watch(changePasswordUseCaseProvider),
     pushNotificationService: ref.watch(pushNotificationServiceProvider),
+    offlineInitialSyncService: ref.watch(offlineInitialSyncServiceProvider),
+    authRepository: ref.watch(authRepositoryProvider),
   );
 });
 
-final passwordRecoveryViewModelProvider = StateNotifierProvider<PasswordRecoveryViewModel, PasswordRecoveryState>((
+final passwordRecoveryViewModelProvider =
+    StateNotifierProvider<PasswordRecoveryViewModel, PasswordRecoveryState>((
   ref,
 ) {
   return PasswordRecoveryViewModel(
