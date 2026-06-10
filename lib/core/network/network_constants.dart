@@ -1,7 +1,7 @@
 class NetworkConstants {
   const NetworkConstants._();
 
-  static const String baseUrl = 'https://parcial.leonardoserrate.xyz/api';
+  static const String baseUrl = 'https://parcial.leonardoserrate.xyz';
 
   static List<String> get baseUrls {
     const String configuredBaseUrl = String.fromEnvironment(

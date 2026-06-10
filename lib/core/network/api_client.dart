@@ -28,25 +28,6 @@ class ApiClient {
     dio.interceptors.add(_DebugNetworkInterceptor());
     dio.interceptors.add(
       InterceptorsWrapper(
-        onRequest: (RequestOptions options, RequestInterceptorHandler handler) {
-          final String path = options.path.trim();
-          if (!path.startsWith('http://') && !path.startsWith('https://')) {
-            String normalizedPath = path;
-            if (normalizedPath.startsWith('/api/')) {
-              normalizedPath = normalizedPath.substring(5);
-            } else if (normalizedPath.startsWith('api/')) {
-              normalizedPath = normalizedPath.substring(4);
-            } else if (normalizedPath.startsWith('/api')) {
-              normalizedPath = normalizedPath.substring(4);
-            } else if (normalizedPath.startsWith('api')) {
-              normalizedPath = normalizedPath.substring(3);
-            } else if (normalizedPath.startsWith('/')) {
-              normalizedPath = normalizedPath.substring(1);
-            }
-            options.path = normalizedPath;
-          }
-          handler.next(options);
-        },
         onError:
             (DioException exception, ErrorInterceptorHandler handler) async {
               if (!_shouldRetryWithAlternativeBaseUrl(exception)) {
