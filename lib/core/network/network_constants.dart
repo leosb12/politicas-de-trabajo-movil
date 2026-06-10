@@ -1,41 +1,18 @@
-import 'package:flutter/foundation.dart';
-
 class NetworkConstants {
   const NetworkConstants._();
 
-  static const String _configuredBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: '',
-  );
-  static const String _legacyLanBaseUrl = 'http://localhost:8080';
-
-  static String get baseUrl => baseUrls.first;
+  static const String baseUrl = 'https://parcial.leonardoserrate.xyz/api';
 
   static List<String> get baseUrls {
-    final String configuredBaseUrl = _normalizeBaseUrl(_configuredBaseUrl);
-    if (configuredBaseUrl.isNotEmpty) {
-      return <String>[configuredBaseUrl];
+    const String configuredBaseUrl = String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: '',
+    );
+    final String normalized = _normalizeBaseUrl(configuredBaseUrl);
+    if (normalized.isNotEmpty) {
+      return <String>[normalized];
     }
-
-    final List<String> resolved = <String>[];
-
-    void addCandidate(String rawUrl) {
-      final String normalized = _normalizeBaseUrl(rawUrl);
-      if (normalized.isEmpty || resolved.contains(normalized)) {
-        return;
-      }
-      resolved.add(normalized);
-    }
-
-    for (final String rawUrl in _defaultBaseUrlsForCurrentPlatform) {
-      addCandidate(rawUrl);
-    }
-
-    if (resolved.isEmpty) {
-      resolved.add(_legacyLanBaseUrl);
-    }
-
-    return resolved;
+    return const <String>[baseUrl];
   }
 
   static const String healthCheckPath = '/api/health';
@@ -126,31 +103,7 @@ class NetworkConstants {
     return '/api/tareas/$encodedId/documentos-colaborativos';
   }
 
-  static List<String> get _defaultBaseUrlsForCurrentPlatform {
-    if (kIsWeb) {
-      return const <String>[
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-        _legacyLanBaseUrl,
-      ];
-    }
 
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android:
-        return const <String>['http://localhost:8080', _legacyLanBaseUrl];
-      case TargetPlatform.iOS:
-        return const <String>['http://localhost:8080', _legacyLanBaseUrl];
-      case TargetPlatform.macOS:
-      case TargetPlatform.linux:
-      case TargetPlatform.windows:
-      case TargetPlatform.fuchsia:
-        return const <String>[
-          'http://localhost:8080',
-          'http://127.0.0.1:8080',
-          _legacyLanBaseUrl,
-        ];
-    }
-  }
 
   static String _normalizeBaseUrl(String rawUrl) {
     return rawUrl.trim().replaceFirst(RegExp(r'/+$'), '');
