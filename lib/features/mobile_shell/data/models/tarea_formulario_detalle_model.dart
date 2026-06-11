@@ -81,7 +81,7 @@ class CampoFormularioDetalleModel {
       ]),
       tipo: _stringByKeys(json, <String>['tipo']),
       etiqueta: json['etiqueta'] != null ? _stringValue(json['etiqueta']) : null,
-      requerido: json['requerido'] as bool? ?? false,
+      requerido: json['requerido'] == true || json['required'] == true,
       placeholder: json['placeholder'] != null ? _stringValue(json['placeholder']) : null,
       ayuda: json['ayuda'] != null ? _stringValue(json['ayuda']) : null,
       opciones: json['opciones'] is List
