@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/offline/offline_providers.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../data/datasource/tramites_remote_datasource.dart';
 import '../../data/repositories/tramites_repository_impl.dart';
@@ -24,6 +25,8 @@ final tramitesRemoteDataSourceProvider = Provider<TramitesRemoteDataSource>((
 final tramitesRepositoryProvider = Provider<TramitesRepository>((ref) {
   return TramitesRepositoryImpl(
     remoteDataSource: ref.watch(tramitesRemoteDataSourceProvider),
+    snapshotStore: ref.watch(snapshotStoreProvider),
+    connectivity: ref.watch(connectivityNotifierProvider.notifier),
   );
 });
 

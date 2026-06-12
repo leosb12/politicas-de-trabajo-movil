@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'dart:developer' as developer;
 
@@ -5,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../network/api_failure.dart';
+import '../network/network_constants.dart';
 import 'health_check_service.dart';
 import 'mobile_snapshot_store.dart';
 import 'offline_queue_store.dart';
@@ -133,6 +135,11 @@ class OfflineSyncService extends StateNotifier<SyncState> {
         ? Map<String, dynamic>.from(item.body!)
         : null;
 
+    if (item.entityType == OfflineEntityType.instanciaTramite && resolvedBody != null) {
+      final String politicaId = resolvedBody['politicaId']?.toString() ?? '';
+      resolvedBody = await _uploadPendingFilesOfBody(item.userId, politicaId, resolvedBody);
+    }
+
     if (item.localInstanciaId != null &&
         _localToRealIdMap.containsKey(item.localInstanciaId)) {
       final String realInstanciaId =
@@ -179,6 +186,91 @@ class OfflineSyncService extends StateNotifier<SyncState> {
     }
   }
 
+  Future<Map<String, dynamic>?> _uploadPendingFilesOfBody(
+    String userId,
+    String politicaId,
+    Map<String, dynamic>? body,
+  ) async {
+    if (body == null) return null;
+    final Map<String, dynamic> newBody = Map<String, dynamic>.from(body);
+
+    if (newBody.containsKey('respuestasRequisitosIniciales')) {
+      final dynamic reqs = newBody['respuestasRequisitosIniciales'];
+      if (reqs is Map) {
+        final Map<String, dynamic> reqsMap = Map<String, dynamic>.from(reqs);
+        bool modified = false;
+
+        for (final String key in reqsMap.keys) {
+          final dynamic value = reqsMap[key];
+          if (value is Map && value['isOfflineFile'] == true) {
+            final String? base64Content = value['base64']?.toString();
+            final String? originalName = value['nombreOriginal']?.toString();
+
+            if (base64Content != null && base64Content.isNotEmpty) {
+              developer.log(
+                '[SYNC] Uploading offline file for field=$key originalName=$originalName',
+                name: 'OfflineSyncService',
+              );
+
+              // Decode base64 to bytes
+              final List<int> bytes = base64.decode(base64Content);
+
+              // Upload file to /api/archivos
+              final MultipartFile archivo = MultipartFile.fromBytes(
+                bytes,
+                filename: originalName ?? 'archivo_offline.bin',
+              );
+
+              final FormData formData = FormData.fromMap(<String, dynamic>{
+                'archivo': archivo,
+                'politicaId': politicaId,
+                'tramiteId': politicaId,
+                'campoId': key,
+                'usuarioId': userId,
+                'clienteId': userId,
+                'descripcion': 'Requisito inicial $key (offline)',
+              });
+
+              final Response<dynamic> uploadResponse = await _dio.post<dynamic>(
+                NetworkConstants.archivosPath,
+                data: formData,
+                options: Options(
+                  headers: <String, String>{'X-User-Id': userId},
+                ),
+              );
+
+              final dynamic uploadData = uploadResponse.data;
+              String? realFileId;
+              if (uploadData is Map) {
+                realFileId = (uploadData['id'] ?? uploadData['archivoId'])?.toString();
+              }
+
+              if (realFileId != null && realFileId.isNotEmpty) {
+                developer.log(
+                  '[SYNC] File uploaded successfully realId=$realFileId',
+                  name: 'OfflineSyncService',
+                );
+
+                reqsMap[key] = <String, dynamic>{
+                  'archivoId': realFileId,
+                  'nombreOriginal': originalName,
+                };
+                modified = true;
+              } else {
+                throw ApiFailure(message: 'No se pudo obtener el ID del archivo subido en segundo plano.');
+              }
+            }
+          }
+        }
+
+        if (modified) {
+          newBody['respuestasRequisitosIniciales'] = reqsMap;
+        }
+      }
+    }
+    return newBody;
+  }
+
   Future<Response<dynamic>> _executeRequest({
     required String method,
     required String endpoint,
@@ -207,6 +299,10 @@ class OfflineSyncService extends StateNotifier<SyncState> {
 
   String? _extractId(dynamic data) {
     if (data is Map<String, dynamic>) {
+      if (data.containsKey('instancia') && data['instancia'] is Map) {
+        final Map<dynamic, dynamic> inst = data['instancia'] as Map;
+        return inst['id']?.toString();
+      }
       return data['id']?.toString();
     }
     return null;

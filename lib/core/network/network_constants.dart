@@ -23,6 +23,8 @@ class NetworkConstants {
   static const String resetPasswordPath = '/api/auth/reset-password';
   static const String availableTramitesPath =
       '/api/politicas/movil/disponibles';
+  static const String sincronizarCatalogPath =
+      '/api/politicas/movil/sincronizar';
   static const String clasificarSolicitudMovilPath =
       '/api/movil/ia/clasificar-solicitud';
   static const String instanciasPath = '/api/instancias';

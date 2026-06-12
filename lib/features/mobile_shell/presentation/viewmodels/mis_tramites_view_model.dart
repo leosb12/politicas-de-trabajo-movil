@@ -12,6 +12,8 @@ class MisTramitesViewModel extends StateNotifier<MisTramitesState> {
 
   final MisTramitesRepository _repository;
 
+  MisTramitesState get currentState => state;
+
   Future<void> cargarMisTramites({required String usuarioId}) async {
     state = state.copyWith(
       isLoading: true,

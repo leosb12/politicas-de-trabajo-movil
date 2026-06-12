@@ -48,18 +48,27 @@ class IniciarTramiteOfflineDataSource {
     // 1. Crear instancia local
     final Map<String, dynamic> instanciaLocal = <String, dynamic>{
       'id': localId,
+      'localId': localId,
       'usuarioId': actorUserId,
       'codigoTramite': codigoTemporal,
       'nombre': tramiteNombre,
+      'nombrePolitica': tramiteNombre,
       'politicaId': tramiteId,
       'estado': 'PENDIENTE_SINCRONIZACION',
+      'estadoLocal': 'PENDIENTE_SINCRONIZACION',
+      'estadoVisual': 'PENDIENTE DE SINCRONIZACIÓN',
       'estadoInstancia': 'PENDIENTE_SINCRONIZACION',
       'progreso': 0.0,
       'porcentaje': 0,
+      'porcentajeLocal': 0,
       'fechaCreacion': now.toIso8601String(),
+      'fechaCreacionLocal': now.toIso8601String(),
       'fechaCreacionOffline': now.toIso8601String(),
       'esOffline': true,
       'respuestasRequisitosIniciales': respuestasRequisitosIniciales,
+      'datosIniciales': respuestasRequisitosIniciales,
+      'requisitosCompletados': respuestasRequisitosIniciales,
+      'archivosPendientes': <String, dynamic>{},
     };
 
     // 2. Guardar en snapshot (aparece en Mis Trámites)

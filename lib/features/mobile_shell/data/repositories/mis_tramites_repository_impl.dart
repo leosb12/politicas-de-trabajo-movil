@@ -242,6 +242,91 @@ class MisTramitesRepositoryImpl implements MisTramitesRepository {
     final Map<String, dynamic>? cached =
         _snapshotStore.getSeguimiento(userId, instanciaId);
 
+    if (cached == null ||
+        (cached['nodos'] is List && (cached['nodos'] as List).isEmpty)) {
+      final List<dynamic>? cachedTramites = _snapshotStore.getMisTramites(userId);
+      Map<String, dynamic>? localTramite;
+      if (cachedTramites != null) {
+        localTramite = cachedTramites
+            .whereType<Map<dynamic, dynamic>>()
+            .map((t) => Map<String, dynamic>.from(t))
+            .where((t) => t['id']?.toString() == instanciaId)
+            .firstOrNull;
+      }
+
+      if (localTramite != null) {
+        final String politicaId = localTramite['politicaId']?.toString() ?? '';
+        final List<dynamic>? catalog = _snapshotStore.getCatalogoPoliticas(userId);
+        if (catalog != null) {
+          final Map<String, dynamic>? policy = catalog
+              .whereType<Map<dynamic, dynamic>>()
+              .map((p) => Map<String, dynamic>.from(p))
+              .where((p) => p['id']?.toString() == politicaId)
+              .firstOrNull;
+
+          if (policy != null) {
+            developer.log(
+              '[MIS_TRAMITES][REPO] Offline seguimiento — generating from catalog policy $politicaId',
+              name: 'MisTramitesRepositoryImpl',
+            );
+            return TramiteSeguimiento(
+              instanciaId: instanciaId,
+              politicaId: policy['id']?.toString() ?? '',
+              politicaNombre: policy['nombre']?.toString() ?? localTramite['nombre']?.toString() ?? 'Trámite offline',
+              codigoTramite: localTramite['codigoTramite']?.toString() ?? 'PENDIENTE-SYNC',
+              estadoInstancia: localTramite['estado']?.toString() ?? localTramite['estadoInstancia']?.toString() ?? 'PENDIENTE_SINCRONIZACION',
+              laneOrientation: policy['laneOrientation']?.toString() ?? 'horizontal',
+              laneWidth: policy['laneWidth'] != null ? (policy['laneWidth'] as num).toDouble() : null,
+              laneHeight: policy['laneHeight'] != null ? (policy['laneHeight'] as num).toDouble() : null,
+              nodos: policy['nodos'] != null
+                  ? (policy['nodos'] as List)
+                      .whereType<Map<dynamic, dynamic>>()
+                      .map((n) {
+                        final Map<String, dynamic> map = Map<String, dynamic>.from(n);
+                        return NodoSeguimiento(
+                          id: map['id']?.toString() ?? '',
+                          tipo: map['tipo']?.toString() ?? '',
+                          nombre: map['nombre']?.toString() ?? '',
+                          departamentoId: map['departamentoId']?.toString() ?? '',
+                          departamentoNombre: map['departamentoNombre']?.toString() ?? '',
+                          responsableTipo: map['responsableTipo']?.toString() ?? '',
+                          responsableId: map['responsableId']?.toString() ?? '',
+                          responsableNombre: map['responsableNombre']?.toString() ?? '',
+                          posX: map['posX'] != null ? (map['posX'] as num).toDouble() : null,
+                          posY: map['posY'] != null ? (map['posY'] as num).toDouble() : null,
+                          estadoSeguimiento: 'PENDIENTE',
+                          tareaActualId: '',
+                          estadoTareaActual: '',
+                          asignadoA: '',
+                          asignadoANombre: '',
+                        );
+                      })
+                      .toList()
+                  : const <NodoSeguimiento>[],
+              conexiones: policy['conexiones'] != null
+                  ? (policy['conexiones'] as List)
+                      .whereType<Map<dynamic, dynamic>>()
+                      .map((c) {
+                        final Map<String, dynamic> map = Map<String, dynamic>.from(c);
+                        return ConexionSeguimiento(
+                          origen: map['origen']?.toString() ?? map['source']?.toString() ?? '',
+                          destino: map['destino']?.toString() ?? map['target']?.toString() ?? '',
+                          puertoOrigen: map['puertoOrigen']?.toString() ?? '',
+                          puertoDestino: map['puertoDestino']?.toString() ?? '',
+                        );
+                      })
+                      .toList()
+                  : const <ConexionSeguimiento>[],
+              tareas: const <TareaSeguimiento>[],
+              documentos: const <DocumentoSeguimiento>[],
+              departamentosActuales: const <DepartamentoActualSeguimiento>[],
+              nodosActualesIds: const <String>[],
+            );
+          }
+        }
+      }
+    }
+
     if (cached == null) {
       // Si es un trámite offline, devolver seguimiento vacío con estado estimado
       return TramiteSeguimiento(

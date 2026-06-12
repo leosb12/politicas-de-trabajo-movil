@@ -10,6 +10,7 @@ abstract class IniciarTramiteRepository {
     required String texto,
     bool usarDeepSeek = false,
     String? nombreDocumento,
+    bool usarSoloRequisitosIniciales = false,
   });
 
   Future<void> iniciarTramite({

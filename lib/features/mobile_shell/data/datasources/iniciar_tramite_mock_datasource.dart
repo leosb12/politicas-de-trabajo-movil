@@ -10,6 +10,8 @@ abstract class IniciarTramiteDataSource {
     required String texto,
     bool usarDeepSeek = false,
     String? nombreDocumento,
+    bool isOffline = false,
+    bool usarSoloRequisitosIniciales = false,
   });
 
   Future<void> iniciarTramite({
@@ -65,6 +67,8 @@ class IniciarTramiteMockDataSource implements IniciarTramiteDataSource {
     required String texto,
     bool usarDeepSeek = false,
     String? nombreDocumento,
+    bool isOffline = false,
+    bool usarSoloRequisitosIniciales = false,
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 700));
     final TramiteDisponibleItem tramite = _tramitesMock.first;

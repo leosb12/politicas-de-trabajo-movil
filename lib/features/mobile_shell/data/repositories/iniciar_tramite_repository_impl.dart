@@ -7,6 +7,7 @@ import '../../domain/models/tramite_disponible_item.dart';
 import '../../domain/repositories/iniciar_tramite_repository.dart';
 import '../datasources/iniciar_tramite_mock_datasource.dart';
 import '../datasources/iniciar_tramite_offline_datasource.dart';
+import '../datasources/offline_tramite_classifier.dart';
 
 /// Repositorio offline-first para iniciar trámites.
 /// Si el backend está disponible → usa datasource remoto.
@@ -71,13 +72,30 @@ class IniciarTramiteRepositoryImpl implements IniciarTramiteRepository {
     required String texto,
     bool usarDeepSeek = false,
     String? nombreDocumento,
-  }) {
-    // La clasificación IA no se puede hacer offline
+    bool usarSoloRequisitosIniciales = false,
+  }) async {
+    final bool isOffline = !_connectivity.isOnline;
+    if (isOffline) {
+      final List<TramiteDisponibleItem> disponiblesOffline =
+          _offlineDataSource.obtenerTramitesDisponiblesOffline(actorUserId);
+      final List<dynamic>? catalogoDinamico =
+          _snapshotStore.getCatalogoPoliticas(actorUserId);
+      return OfflineTramiteClassifier.clasificar(
+        texto: texto,
+        nombreDocumento: nombreDocumento,
+        politicasEnCache: disponiblesOffline,
+        catalogoDinamico: catalogoDinamico,
+        usarSoloRequisitosIniciales: usarSoloRequisitosIniciales,
+      );
+    }
+
     return _remoteDataSource.clasificarSolicitud(
       actorUserId: actorUserId,
       texto: texto,
       usarDeepSeek: usarDeepSeek,
       nombreDocumento: nombreDocumento,
+      isOffline: isOffline,
+      usarSoloRequisitosIniciales: usarSoloRequisitosIniciales,
     );
   }
 

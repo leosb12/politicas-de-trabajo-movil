@@ -9,6 +9,7 @@ import '../../../auth/presentation/viewmodels/login_state.dart';
 import '../viewmodels/perfil_providers.dart';
 import '../widgets/perfil_header_card.dart';
 import '../widgets/perfil_info_tile.dart';
+import 'offline_data_view.dart';
 
 class PerfilView extends ConsumerStatefulWidget {
   const PerfilView({super.key});
@@ -255,6 +256,22 @@ class _PerfilViewState extends ConsumerState<PerfilView> {
                 ? 'Sin departamento'
                 : perfil.departamento!,
           ),
+        const SizedBox(height: 14),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.cloud_off_rounded, color: Colors.blue),
+            title: const Text('Modo Offline y Datos'),
+            subtitle: const Text('Gestiona tus datos descargados para trabajar sin conexión.'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const OfflineDataView(),
+                ),
+              );
+            },
+          ),
+        ),
         const SizedBox(height: 24),
         Form(
           key: _changePasswordFormKey,

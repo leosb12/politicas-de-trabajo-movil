@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
 import '../../../../core/offline/offline_providers.dart';
+import '../../../../core/offline/offline_sync_service.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../data/datasources/mis_tramites_mock_datasource.dart';
 import '../../data/datasources/mis_tramites_remote_datasource.dart';
@@ -37,9 +38,22 @@ final misTramitesRepositoryProvider = Provider<MisTramitesRepository>((ref) {
 
 final misTramitesViewModelProvider =
     StateNotifierProvider<MisTramitesViewModel, MisTramitesState>((ref) {
-      return MisTramitesViewModel(
+      final viewModel = MisTramitesViewModel(
         repository: ref.watch(misTramitesRepositoryProvider),
       );
+
+      // Escuchar cambios de sincronización en background para refrescar la UI automáticamente
+      ref.listen<SyncState>(offlineSyncServiceProvider, (previous, next) {
+        if (previous == SyncState.syncing &&
+            (next == SyncState.completed || next == SyncState.idle || next == SyncState.error)) {
+          final String? activeUserId = viewModel.currentState.lastLoadedUserId;
+          if (activeUserId != null && activeUserId.isNotEmpty) {
+            viewModel.cargarMisTramites(usuarioId: activeUserId);
+          }
+        }
+      });
+
+      return viewModel;
     });
 
 final tramiteSeguimientoViewModelProvider = StateNotifierProvider.autoDispose

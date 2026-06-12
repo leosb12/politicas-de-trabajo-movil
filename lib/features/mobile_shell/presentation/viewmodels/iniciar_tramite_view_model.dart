@@ -98,6 +98,7 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
     required String texto,
     bool usarDeepSeek = false,
     String? nombreDocumento,
+    bool usarSoloRequisitosIniciales = false,
   }) async {
     final String textoNormalizado = texto.trim();
     if (textoNormalizado.isEmpty && (nombreDocumento == null || nombreDocumento.trim().isEmpty)) {
@@ -121,6 +122,7 @@ class IniciarTramiteViewModel extends StateNotifier<IniciarTramiteState> {
             texto: textoNormalizado,
             usarDeepSeek: usarDeepSeek,
             nombreDocumento: nombreDocumento,
+            usarSoloRequisitosIniciales: usarSoloRequisitosIniciales,
           );
 
       state = state.copyWith(

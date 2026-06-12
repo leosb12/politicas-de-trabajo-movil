@@ -36,6 +36,8 @@ class IniciarTramiteRemoteDataSource implements IniciarTramiteDataSource {
     required String texto,
     bool usarDeepSeek = false,
     String? nombreDocumento,
+    bool isOffline = false,
+    bool usarSoloRequisitosIniciales = false,
   }) async {
     try {
       final Response<dynamic> response = await _dio.post(
@@ -44,10 +46,14 @@ class IniciarTramiteRemoteDataSource implements IniciarTramiteDataSource {
           'texto': texto,
           'usarDeepSeek': usarDeepSeek,
           if (nombreDocumento != null) 'nombreDocumento': nombreDocumento,
+          'usarSoloRequisitosIniciales': usarSoloRequisitosIniciales,
         }),
         options: Options(
           contentType: Headers.jsonContentType,
-          headers: <String, String>{'X-User-Id': actorUserId},
+          headers: <String, String>{
+            'X-User-Id': actorUserId,
+            if (isOffline) 'X-AI-Mode': 'offline',
+          },
         ),
       );
 

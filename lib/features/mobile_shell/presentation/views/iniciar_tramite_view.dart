@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:file_picker/file_picker.dart';
 
 import '../../../../core/network/pago_service.dart';
+import '../../../../core/offline/offline_providers.dart';
 import '../../../auth/presentation/viewmodels/auth_providers.dart';
 import '../../domain/models/tramite_disponible_item.dart';
 import '../../../pagos/presentation/widgets/pago_bottom_sheet.dart';
@@ -32,6 +33,7 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
   bool _speechDisponible = false;
   bool _escuchandoVoz = false;
   PlatformFile? _selectedFile;
+  bool _usarSoloRequisitosIniciales = true;
 
   @override
   void initState() {
@@ -285,6 +287,7 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
         context,
         actorUserId: actorUserId,
         tramite: _toTramiteDisponible(tramite),
+        usarSoloRequisitosIniciales: _usarSoloRequisitosIniciales,
       );
 
       if (respuestasRequisitosIniciales == null) {
@@ -367,6 +370,7 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
     final viewModel = ref.read(iniciarTramiteViewModelProvider.notifier);
     final String actorUserId =
         ref.watch(authViewModelProvider).authenticatedUser?.id.trim() ?? '';
+    final bool isOnline = ref.watch(isOnlineProvider);
 
     if (actorUserId.isNotEmpty &&
         _requestedUserId != actorUserId &&
@@ -489,6 +493,10 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
                   classificationError: state.classificationError,
                   usarDeepSeek: _usarDeepSeek,
                   onUsarDeepSeekChanged: (val) => setState(() => _usarDeepSeek = val),
+                  usarSoloRequisitosIniciales: _usarSoloRequisitosIniciales,
+                  onUsarSoloRequisitosInicialesChanged: (val) =>
+                      setState(() => _usarSoloRequisitosIniciales = val),
+                  isOnline: isOnline,
                   tramiteRecomendado: state.classification == null
                       ? null
                       : _buscarTramitePorId(
@@ -507,6 +515,7 @@ class _IniciarTramiteViewState extends ConsumerState<IniciarTramiteView> {
                       texto: _necesidadController.text,
                       usarDeepSeek: _usarDeepSeek,
                       nombreDocumento: _obtenerNombreDocumento(),
+                      usarSoloRequisitosIniciales: _usarSoloRequisitosIniciales,
                     );
                   },
                   onClear: () {
@@ -572,6 +581,9 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
     required this.onIniciar,
     required this.usarDeepSeek,
     required this.onUsarDeepSeekChanged,
+    required this.usarSoloRequisitosIniciales,
+    required this.onUsarSoloRequisitosInicialesChanged,
+    required this.isOnline,
     required this.escuchandoVoz,
     required this.onToggleVoz,
     required this.selectedFile,
@@ -590,6 +602,9 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
   final ValueChanged<TramiteDisponibleItem> onIniciar;
   final bool usarDeepSeek;
   final ValueChanged<bool> onUsarDeepSeekChanged;
+  final bool usarSoloRequisitosIniciales;
+  final ValueChanged<bool> onUsarSoloRequisitosInicialesChanged;
+  final bool isOnline;
   final bool escuchandoVoz;
   final VoidCallback onToggleVoz;
   final PlatformFile? selectedFile;
@@ -696,6 +711,29 @@ class _NecesidadClasificacionPanel extends StatelessWidget {
                   'Usar análisis avanzado',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Checkbox(
+                  key: const Key('usarSoloRequisitosInicialesCheckbox'),
+                  value: usarSoloRequisitosIniciales,
+                  onChanged: (bool? val) {
+                    if (val != null) {
+                      onUsarSoloRequisitosInicialesChanged(val);
+                    }
+                  },
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Priorizar requisitos iniciales en la recomendación',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],

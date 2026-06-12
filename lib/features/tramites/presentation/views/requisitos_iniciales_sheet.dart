@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_failure.dart';
 import '../../../../core/network/network_constants.dart';
+import '../../../../core/offline/offline_providers.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../mobile_shell/data/datasources/offline_tramite_classifier.dart';
 import '../../../mobile_shell/domain/models/tarea_formulario_detalle.dart';
 import '../../domain/entities/tramite_disponible.dart';
 import '../viewmodels/tramites_providers.dart';
@@ -15,15 +18,18 @@ class RequisitosInicialesSheet extends ConsumerStatefulWidget {
     super.key,
     required this.actorUserId,
     required this.tramite,
+    this.usarSoloRequisitosIniciales = false,
   });
 
   final String actorUserId;
   final TramiteDisponible tramite;
+  final bool usarSoloRequisitosIniciales;
 
   static Future<Map<String, dynamic>?> show(
     BuildContext context, {
     required String actorUserId,
     required TramiteDisponible tramite,
+    bool usarSoloRequisitosIniciales = false,
   }) {
     return showModalBottomSheet<Map<String, dynamic>?>(
       context: context,
@@ -34,6 +40,7 @@ class RequisitosInicialesSheet extends ConsumerStatefulWidget {
         return RequisitosInicialesSheet(
           actorUserId: actorUserId,
           tramite: tramite,
+          usarSoloRequisitosIniciales: usarSoloRequisitosIniciales,
         );
       },
     );
@@ -57,6 +64,9 @@ class _RequisitosInicialesSheetState
   final Map<String, String> _uploadedFileIds = <String, String>{};
   final Map<String, String> _uploadedFileNames = <String, String>{};
   final Map<String, bool> _uploadingFields = <String, bool>{};
+  final Map<String, String> _offlineFileBytes = <String, String>{};
+  final Map<String, Map<String, dynamic>> _detectedOfflineMetadata =
+      <String, Map<String, dynamic>>{};
 
   List<CampoFormularioDetalle> _requisitos = <CampoFormularioDetalle>[];
   bool _isLoading = true;
@@ -127,6 +137,8 @@ class _RequisitosInicialesSheetState
     _uploadedFileIds.clear();
     _uploadedFileNames.clear();
     _uploadingFields.clear();
+    _offlineFileBytes.clear();
+    _detectedOfflineMetadata.clear();
 
     for (final CampoFormularioDetalle campo in requisitos) {
       switch (campo.tipoNormalizado) {
@@ -240,10 +252,19 @@ class _RequisitosInicialesSheetState
           payload[campo.clave] = _gridValues[campo.clave] ?? <List<String>>[];
           break;
         case 'ARCHIVO':
-          payload[campo.clave] = <String, dynamic>{
-            'archivoId': _uploadedFileIds[campo.clave],
-            'nombreOriginal': _uploadedFileNames[campo.clave],
+          final String? fileId = _uploadedFileIds[campo.clave];
+          final String? fileName = _uploadedFileNames[campo.clave];
+          final String? base64Str = _offlineFileBytes[campo.clave];
+          final Map<String, dynamic> filePayload = <String, dynamic>{
+            'archivoId': fileId,
+            'nombreOriginal': fileName,
+            if (base64Str != null) 'isOfflineFile': true,
+            if (base64Str != null) 'base64': base64Str,
           };
+          if (base64Str != null && _detectedOfflineMetadata.containsKey(campo.clave)) {
+            filePayload.addAll(_detectedOfflineMetadata[campo.clave]!);
+          }
+          payload[campo.clave] = filePayload;
           break;
         case 'DOCUMENTO_COLABORATIVO':
           payload[campo.clave] = <String, dynamic>{
@@ -287,28 +308,152 @@ class _RequisitosInicialesSheetState
         _uploadingFields[campo.clave] = true;
       });
 
-      final String archivoId = await _subirArchivoInicial(
-        campo: campo,
-        file: file,
-        bytes: bytes,
-      );
+      final bool isOnline = ref.read(isOnlineProvider);
+      String archivoId;
+      if (isOnline) {
+        archivoId = await _subirArchivoInicial(
+          campo: campo,
+          file: file,
+          bytes: bytes,
+        );
 
-      if (!mounted) {
-        return;
+        if (!mounted) {
+          return;
+        }
+
+        setState(() {
+          _uploadedFileIds[campo.clave] = archivoId;
+          _uploadedFileNames[campo.clave] = file.name;
+          _uploadingFields[campo.clave] = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Archivo "${file.name}" subido correctamente.'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      } else {
+        archivoId = 'local_file_${DateTime.now().millisecondsSinceEpoch}';
+        final String base64Content = base64Encode(bytes);
+
+        if (!mounted) {
+          return;
+        }
+
+        if (widget.usarSoloRequisitosIniciales) {
+          final List<CampoFormularioDetalle> fileFields = _requisitos
+              .where((r) => r.tipoNormalizado == 'ARCHIVO')
+              .toList();
+
+          final Map<CampoFormularioDetalle, double> scores = {};
+          for (final CampoFormularioDetalle r in fileFields) {
+            final double score = OfflineRequisitoDetector.calcularScoreRequisito(
+              nombreArchivo: file.name,
+              clave: r.clave,
+              etiqueta: r.etiqueta ?? '',
+              ayuda: r.ayuda ?? '',
+              palabrasClave: null,
+            );
+            scores[r] = score;
+          }
+
+          final List<MapEntry<CampoFormularioDetalle, double>> sortedScores = scores.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
+
+          double highestScore = 0.0;
+          CampoFormularioDetalle? matchedField;
+          bool hasTie = false;
+
+          if (sortedScores.isNotEmpty) {
+            highestScore = sortedScores.first.value;
+            matchedField = sortedScores.first.key;
+            if (sortedScores.length > 1 && sortedScores[1].value == highestScore && highestScore > 0) {
+              hasTie = true;
+            }
+          }
+
+          if (highestScore >= 5.0 && !hasTie && matchedField != null) {
+            setState(() {
+              _offlineFileBytes[matchedField!.clave] = base64Content;
+              _uploadedFileIds[matchedField.clave] = archivoId;
+              _uploadedFileNames[matchedField.clave] = file.name;
+              _uploadingFields[campo.clave] = false;
+
+              _detectedOfflineMetadata[matchedField.clave] = <String, dynamic>{
+                'requisitoId': matchedField.clave,
+                'nombreRequisito': matchedField.etiqueta ?? matchedField.clave,
+                'archivoLocalId': archivoId,
+                'nombreArchivo': file.name,
+                'detectadoOffline': true,
+                'metodoDeteccion': 'NOMBRE_ARCHIVO',
+                'confianzaDeteccion': (highestScore / 6.0).clamp(0.0, 1.0),
+                'isOfflineFile': true,
+              };
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Archivo asociado automáticamente al requisito: ${matchedField.etiqueta ?? matchedField.clave}'),
+                backgroundColor: Colors.green.shade700,
+              ),
+            );
+          } else if (highestScore >= 3.0 && highestScore < 5.0 && !hasTie && matchedField != null) {
+            setState(() {
+              _offlineFileBytes[matchedField!.clave] = base64Content;
+              _uploadedFileIds[matchedField.clave] = archivoId;
+              _uploadedFileNames[matchedField.clave] = file.name;
+              _uploadingFields[campo.clave] = false;
+
+              _detectedOfflineMetadata[matchedField.clave] = <String, dynamic>{
+                'requisitoId': matchedField.clave,
+                'nombreRequisito': matchedField.etiqueta ?? matchedField.clave,
+                'archivoLocalId': archivoId,
+                'nombreArchivo': file.name,
+                'detectadoOffline': true,
+                'metodoDeteccion': 'NOMBRE_ARCHIVO',
+                'confianzaDeteccion': (highestScore / 6.0).clamp(0.0, 1.0),
+                'isOfflineFile': true,
+              };
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Posible coincidencia con ${matchedField.etiqueta ?? matchedField.clave}. Verificá antes de continuar.'),
+                backgroundColor: Colors.orange.shade800,
+              ),
+            );
+          } else {
+            setState(() {
+              _offlineFileBytes[campo.clave] = base64Content;
+              _uploadedFileIds[campo.clave] = archivoId;
+              _uploadedFileNames[campo.clave] = file.name;
+              _uploadingFields[campo.clave] = false;
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('No se pudo asociar automáticamente este archivo a un requisito inicial.'),
+                backgroundColor: Colors.red.shade700,
+              ),
+            );
+          }
+        } else {
+          setState(() {
+            _offlineFileBytes[campo.clave] = base64Content;
+            _uploadedFileIds[campo.clave] = archivoId;
+            _uploadedFileNames[campo.clave] = file.name;
+            _uploadingFields[campo.clave] = false;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Archivo "${file.name}" cargado localmente (sin conexión).'),
+              backgroundColor: Colors.green.shade700,
+            ),
+          );
+        }
       }
-
-      setState(() {
-        _uploadedFileIds[campo.clave] = archivoId;
-        _uploadedFileNames[campo.clave] = file.name;
-        _uploadingFields[campo.clave] = false;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Archivo "${file.name}" subido correctamente.'),
-          backgroundColor: Colors.green.shade700,
-        ),
-      );
     } on ApiFailure catch (failure) {
       if (!mounted) {
         return;

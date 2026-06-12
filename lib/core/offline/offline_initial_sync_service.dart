@@ -216,6 +216,111 @@ class OfflineInitialSyncService {
     }
     return <dynamic>[];
   }
+
+  /// Sincronización manual completa: descarga catálogo (con flujos y requisitos),
+  /// trámites personales, seguimientos y tareas.
+  Future<SyncResult> syncCompleto({required String userId}) async {
+    if (_syncing) {
+      developer.log('[INIT_SYNC] Already syncing, skipping', name: 'OfflineInitialSyncService');
+      return const SyncResult(success: false, message: 'Sincronización en progreso');
+    }
+
+    _syncing = true;
+    developer.log('[INIT_SYNC] Starting full manual sync for userId=$userId', name: 'OfflineInitialSyncService');
+
+    int synced = 0;
+    int errors = 0;
+
+    try {
+      // 1. Sincronizar catálogo dinámico completo (políticas, requisitos, flujos)
+      try {
+        final Response<dynamic> response = await _dio.get<dynamic>(
+          NetworkConstants.sincronizarCatalogPath,
+          options: Options(headers: <String, String>{'X-User-Id': userId}),
+        );
+        final dynamic data = response.data;
+        final List<dynamic> list = _extractList(data);
+
+        // Guardar catálogo completo en caché
+        await _snapshotStore.saveCatalogoPoliticas(userId, list);
+
+        // Convertir y guardar en trámite disponibles para mantener compatibilidad con la vista
+        final List<dynamic> tramitesDisponiblesCompat = list.map((dynamic p) {
+          if (p is Map) {
+            final Map<String, dynamic> map = Map<String, dynamic>.from(p);
+            return <String, dynamic>{
+              'id': map['id']?.toString() ?? '',
+              'nombre': map['nombre']?.toString() ?? '',
+              'descripcion': map['descripcion']?.toString() ?? '',
+              'requierePago': map['requierePago'] as bool? ?? false,
+              'tieneRequisitosIniciales': map['requisitosIniciales'] != null &&
+                  (map['requisitosIniciales'] as List).isNotEmpty,
+              'montoPago': map['montoPago'],
+              'monedaPago': map['monedaPago']?.toString(),
+              'descripcionPago': map['descripcionPago']?.toString(),
+            };
+          }
+          return p;
+        }).toList();
+
+        await _snapshotStore.saveTramitesDisponibles(userId, tramitesDisponiblesCompat);
+        synced++;
+        developer.log('[INIT_SYNC] Saved catalog count=${list.length}', name: 'OfflineInitialSyncService');
+      } catch (e) {
+        developer.log('[INIT_SYNC] Failed full catalog sync: $e', name: 'OfflineInitialSyncService');
+        errors++;
+      }
+
+      // 2. Sincronizar mis trámites (cards)
+      List<Map<String, dynamic>> misTramitesRaw = <Map<String, dynamic>>[];
+      try {
+        misTramitesRaw = await _syncMisTramites(userId);
+        synced++;
+      } catch (e) {
+        developer.log('[INIT_SYNC] Failed misTramites sync: $e', name: 'OfflineInitialSyncService');
+        errors++;
+      }
+
+      // 3. Para cada trámite, precargar seguimiento + tareas
+      for (final Map<String, dynamic> tramite in misTramitesRaw) {
+        final String instanciaId = tramite['id']?.toString() ?? '';
+        if (instanciaId.isEmpty) continue;
+
+        try {
+          await _syncSeguimiento(userId, instanciaId);
+          synced++;
+        } catch (e) {
+          developer.log('[INIT_SYNC] Failed seguimiento instanciaId=$instanciaId: $e', name: 'OfflineInitialSyncService');
+          errors++;
+        }
+      }
+
+      // 4. Precargar tareas propias de los seguimientos
+      await _syncTareasFromSeguimientos(userId, misTramitesRaw);
+
+      // 5. Guardar timestamp de última sincronización
+      await _snapshotStore.saveLastSync(userId);
+
+      return SyncResult(
+        success: errors == 0,
+        message: errors == 0
+            ? 'Catálogo y datos sincronizados correctamente.'
+            : 'Sincronización parcial ($errors errores).',
+        syncedItems: synced,
+        errorCount: errors,
+      );
+    } catch (e, st) {
+      developer.log(
+        '[INIT_SYNC] Unexpected error in full sync: $e',
+        name: 'OfflineInitialSyncService',
+        error: e,
+        stackTrace: st,
+      );
+      return SyncResult(success: false, message: 'Error en sincronización: $e');
+    } finally {
+      _syncing = false;
+    }
+  }
 }
 
 /// Resultado de la sincronización inicial.
